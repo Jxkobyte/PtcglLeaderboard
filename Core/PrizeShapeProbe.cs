@@ -34,13 +34,57 @@ namespace PrizeTracker.Core
             Plugin.Log.LogInfo("prize shape probe waiting: " + why);
         }
 
+        private bool _dumpedOpenView;
+
         private void Update()
         {
-            if (_done || !InMatch || Time.unscaledTime < _next) return;
+            if (!InMatch) return;
+
+            // The prize VIEW panel is its own question: the board can be showing dressed cards
+            // while that panel shows sleeve backs, which means the slots it draws through are not
+            // turned the way the board's are. Catch it while it is actually open.
+            try { DumpWhileOpen(); } catch { }
+
+            if (_done || Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 2f;
 
             try { Run(); }
             catch (Exception e) { _done = true; Plugin.Log.LogWarning("prize shape probe failed: " + e.Message); }
+        }
+
+        private void DumpWhileOpen()
+        {
+            var owner = FindOwnPrizeController();
+            var menu = owner != null ? owner.prizeDisplayMenu : null;
+            if (menu == null || !menu.IsOpen) { _dumpedOpenView = false; return; }
+            if (_dumpedOpenView) return;
+            _dumpedOpenView = true;
+
+            Plugin.Log.LogWarning("=== prize panel open: inspection=" + menu.IsInInspection
+                + " awaitingSelection=" + menu.IsAwaitingSelection + " ===");
+
+            int i = 0;
+            foreach (var mover in menu.PrizeSlots)
+            {
+                Plugin.Log.LogWarning("  slot " + i + ": "
+                    + (mover == null ? "(null mover)"
+                       : mover.name + " rot=" + mover.transform.localRotation.eulerAngles
+                         + " active=" + mover.gameObject.activeInHierarchy
+                         + " children=" + mover.transform.childCount));
+                i++;
+            }
+
+            var prizes = owner.SlottedPrizes;
+            for (int k = 0; prizes != null && k < prizes.Count; k++)
+            {
+                var c = prizes[k];
+                if (c == null) { Plugin.Log.LogWarning("  prize " + k + ": (taken)"); continue; }
+                var g = c.view != null ? c.view.graphic : null;
+                Plugin.Log.LogWarning("  prize " + k + ": " + c.name
+                    + " graphic=" + (g == null ? "none" : g.CardId)
+                    + " fwd=" + c.transform.forward
+                    + " parent=" + (c.transform.parent != null ? c.transform.parent.name : "(none)"));
+            }
         }
 
         private void Run()

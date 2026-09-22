@@ -94,8 +94,7 @@ namespace PrizeTracker
             Log.LogInfo("Match history: " + _history.Count + " recorded (" + historyPath + ")");
             _host.AddComponent<CardArt>();   // serves card textures to the overlay
             _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
-            var hot = _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
-            hot.Tracker = _tracker;
+            _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
             _host.AddComponent<CardAspectProbe>(); // what shape does the CLIENT draw a card texture at
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system

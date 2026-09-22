@@ -51,6 +51,7 @@ namespace PrizeTracker.Core
         private string _signature;
         private float _next;
         private bool _failed;
+        private PrizeController _owner;
 
         private void Update()
         {
@@ -59,18 +60,53 @@ namespace PrizeTracker.Core
             if (!InMatch)
             {
                 if (_dressed.Count > 0) { _dressed.Clear(); _signature = null; }
+                _owner = null;
                 return;
             }
 
-            if (Time.unscaledTime < _next) return;
-            _next = Time.unscaledTime + 0.3f;
+            try
+            {
+                // EVERY FRAME, and deliberately.
+                //
+                // The client sets its slot rotations when the prize panel opens - identity, since
+                // as far as it is concerned nothing here is revealed - so whatever we set before
+                // that is undone at the moment of opening. Correcting on a 0.3s tick meant the
+                // cards visibly turned face down and then back again each time the panel opened.
+                //
+                // This is not the client continuously fighting us: nothing of its own runs against
+                // this frame to frame, it simply gets there first. Re-asserting every frame closes
+                // the gap to one frame. It is cheap because the expensive part - finding the
+                // controller by scanning every loaded object - stays on the throttle below, and
+                // because rotations are only written when they are actually wrong.
+                FaceFrame();
 
-            try { Apply(); }
+                if (Time.unscaledTime >= _next)
+                {
+                    _next = Time.unscaledTime + 0.3f;
+                    Apply();
+                }
+            }
             catch (Exception e)
             {
                 _failed = true;
                 Plugin.Log.LogWarning("prize reveal disabled: " + e.Message);
             }
+        }
+
+        /// <summary>The cheap half: re-assert facing using the controller found on the last tick.</summary>
+        private void FaceFrame()
+        {
+            if (_owner == null || Tracker == null) return;
+
+            var menu = _owner.prizeDisplayMenu;
+            if (menu != null && menu.IsAwaitingSelection) return;
+
+            bool anyKnown = false;
+            foreach (var p in Tracker.PrizeSlots) if (p.Known) { anyKnown = true; break; }
+            if (!anyKnown) return;
+
+            var cards = _owner.SlottedPrizes;
+            if (cards != null) FaceSlotsOut(menu, cards);
         }
 
         private void Apply()
@@ -87,6 +123,7 @@ namespace PrizeTracker.Core
             if (sig != _signature) { _signature = sig; _dressed.Clear(); }
 
             var owner = FindOwnPrizeController();
+            _owner = owner;
             if (owner == null) return;
 
             // NEVER while the client is asking which prize to take.
@@ -121,7 +158,7 @@ namespace PrizeTracker.Core
                 n++;
             }
 
-            ShowDrawerSlotsFaceUp(n);
+            FaceSlotsOut(menu, cards);
         }
 
         /// <summary>
@@ -177,12 +214,10 @@ namespace PrizeTracker.Core
             _dressed.Clear();
             _signature = null;
 
-            foreach (var slot in Resources.FindObjectsOfTypeAll<global::PrizeSlot>())
-            {
-                if (slot == null || slot.SlotMover == null) continue;
-                if (!slot.gameObject.activeInHierarchy) continue;
-                slot.SlotMover.transform.localRotation = Quaternion.identity;
-            }
+            var menu = owner != null ? owner.prizeDisplayMenu : null;
+            if (menu == null) return;
+            foreach (var mover in menu.PrizeSlots)
+                if (mover != null) mover.transform.localRotation = Quaternion.identity;
         }
 
         /// <summary>
@@ -193,17 +228,39 @@ namespace PrizeTracker.Core
         /// be re-applied rather than set once. It also means the client corrects us for free: a
         /// slot holding a card we did not solve gets set back to face-down by its own code.
         /// </summary>
-        private static void ShowDrawerSlotsFaceUp(int count)
+        private static void FaceSlotsOut(PrizeCardSelectionMenu menu, IReadOnlyList<Card3D> prizes)
         {
-            if (count <= 0) return;
+            if (menu == null) return;
 
+            // The menu's own ordered slot list, paired with the prize list the same way its own
+            // SetMoversOverTime pairs them - prizes[i] sits in slot i.
+            //
+            // Turning the MOVER is what the client does, but it only takes effect through the
+            // positioner as it places the card. Probing the open panel showed the movers rotated
+            // exactly as intended and nothing on screen changing: every mover was inactive with no
+            // children, and the cards were parented to the slot root instead. Rotating a mover a
+            // card is not attached to, after the positioner has already finished placing it, moves
+            // nothing.
+            //
+            // So the card's own rotation is set through its positioner as well. Both are set to
+            // the same value, which means it does not matter which one ends up driving.
+            var face = Quaternion.Euler(0f, 180f, 0f);
             int i = 0;
-            foreach (var slot in Resources.FindObjectsOfTypeAll<global::PrizeSlot>())
+            foreach (var mover in menu.PrizeSlots)
             {
-                if (slot == null || !slot.gameObject.activeInHierarchy) continue;
-                if (slot.SlotMover == null) continue;
-                if (i++ >= count) continue;
-                slot.SlotMover.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                bool show = i < prizes.Count && prizes[i] != null;
+                var want = show ? face : Quaternion.identity;
+
+                if (mover != null) mover.transform.localRotation = want;
+
+                if (show)
+                {
+                    var card = prizes[i];
+                    var pos = card.positioner;
+                    if (pos != null && Quaternion.Angle(card.transform.localRotation, want) > 1f)
+                        pos.SetLocalRotation(want);
+                }
+                i++;
             }
         }
 
