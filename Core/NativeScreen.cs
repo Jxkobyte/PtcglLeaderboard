@@ -345,29 +345,45 @@ namespace PrizeTracker.Core
             // Opponent avatar: same circular framing as before, at full row height.
             Art(row, AvatarKey(m), 800, 0, RowH - 8f, RowH - 8f, false, true);
 
+            // The right-hand side of a row, laid out as one strip so the pieces cannot run into
+            // each other. Buttons are placed by their RIGHT edge (pivot 1), the opponent block by
+            // its left, and the timestamp sits in the gap between them. The timestamp previously
+            // ended at 1478 while ADD FRIEND began at 1470, so "just now" was drawn under it.
+            const float rowRight = RowW - 20f;                 // 2080
+            const float logW = 170f, deckW = 190f, addW = 210f, btnGap = 18f;
+            const float logRight = rowRight;                   // 1910..2080
+            const float deckRight = logRight - logW - btnGap;   // 1702..1892
+            const float addRight = deckRight - deckW - btnGap;  // 1474..1684
+            const float whenRight = addRight - 24f;             // 1260..1450
+            const float oppW = whenRight - 190f - 896f - 20f;   // opponent block, clear of the time
+
             var oppName = GameArt.Label("Text_Medium", row,
                                         string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 34, Ink,
                                         TextAlignmentOptions.MidlineLeft);
-            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, 896, 18, 520, 44);
+            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, 896, 18, oppW, 44);
 
             var oppDeck = GameArt.Label("Text_Regular", row,
                                         string.IsNullOrEmpty(m.OppArchetype) ? "unknown deck" : m.OppArchetype,
                                         26, InkDim, TextAlignmentOptions.MidlineLeft);
-            Place(oppDeck.rectTransform, 0, 0.5f, 0, 0.5f, 896, -22, 520, 36);
+            Place(oppDeck.rectTransform, 0, 0.5f, 0, 0.5f, 896, -22, oppW, 36);
 
             var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
                                      TextAlignmentOptions.MidlineRight);
-            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, 1478, 0, 210, 40);
+            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, whenRight, 0, 190, 40);
 
             // ADD FRIEND, the same request the client's own end-of-match button sends.
             //
             // Already a friend, or no name recorded, leaves it visible but disabled rather than
             // absent: a button that vanishes on some rows reads as a bug, while a dimmed one with
             // "FRIENDS" on it answers the question being asked.
-            bool named = !string.IsNullOrEmpty(m.Opponent);
+            // The practice opponent is not a person to befriend. "AI" is the literal name the
+            // client records for a Test vs AI match, so it is treated as not-a-player rather than
+            // letting the request go out and fail.
+            bool named = !string.IsNullOrEmpty(m.Opponent) &&
+                         !m.Opponent.Equals("AI", StringComparison.OrdinalIgnoreCase);
             bool friends = named && Friends.AlreadyFriends(m.Opponent);
             TextMeshProUGUI addLabel = null;
-            addLabel = Button(row, friends ? "FRIENDS" : "ADD FRIEND", 1700, 230, false,
+            addLabel = Button(row, friends ? "FRIENDS" : "ADD FRIEND", addRight, addW, false,
                               named && !friends, () =>
             {
                 // Explicit click only. This sends a real message to a real player.
@@ -377,11 +393,11 @@ namespace PrizeTracker.Core
             });
 
             bool hasCards = m.OppCardsSeen() > 0;
-            Button(row, "VIEW DECK", 1944, 200, true, hasCards, () => OpenDeck(m));
+            Button(row, "VIEW DECK", deckRight, deckW, true, hasCards, () => OpenDeck(m));
 
             bool hasLog = !string.IsNullOrEmpty(m.Log);
             TextMeshProUGUI logLabel = null;
-            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", 2158, 180, false, hasLog, () =>
+            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", logRight, logW, false, hasLog, () =>
             {
                 try
                 {
