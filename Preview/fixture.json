@@ -1,0 +1,600 @@
+{
+ "note": "Real mid-game state from a PokeAI self-play replay (dragapult vs ns-zoroark, turn 12), plus the real 60-card decklist and card ids resolved from the client card database. Deck count is recomputed as 60 - visible - prizes because the replay format only exports the TOP card of an evolution stack, so cards underneath are not listed.",
+ "turn": 12,
+ "decklist": {
+  "Dreepy": 4,
+  "Drakloak": 4,
+  "Dragapult ex": 3,
+  "Munkidori": 2,
+  "Dunsparce": 1,
+  "Dudunsparce": 1,
+  "Budew": 1,
+  "Fezandipiti ex": 1,
+  "Meowth ex": 1,
+  "Lillie's Determination": 4,
+  "Boss's Orders": 3,
+  "Crispin": 2,
+  "Rosa's Encouragement": 1,
+  "Buddy-Buddy Poffin": 4,
+  "Poké Pad": 4,
+  "Ultra Ball": 4,
+  "Crushing Hammer": 4,
+  "Night Stretcher": 3,
+  "Special Red Card": 1,
+  "Unfair Stamp": 1,
+  "Risky Ruins": 2,
+  "Basic {P} Energy": 4,
+  "Basic {R} Energy": 3,
+  "Basic {D} Energy": 2
+ },
+ "srcIds": {
+  "Dreepy": "sv6_128",
+  "Drakloak": "sv6_129",
+  "Dragapult ex": "sv6_130",
+  "Munkidori": "sv6_95",
+  "Dunsparce": "sv9_120",
+  "Dudunsparce": "sv5_129",
+  "Budew": "me2-5_16",
+  "Fezandipiti ex": "me2-5_142",
+  "Meowth ex": "me3_62",
+  "Lillie's Determination": "me1_119",
+  "Boss's Orders": "me1_114",
+  "Crispin": "sv7_133",
+  "Rosa's Encouragement": "me3_84",
+  "Buddy-Buddy Poffin": "sv5_144",
+  "Poké Pad": "me3_81",
+  "Ultra Ball": "me1_131",
+  "Crushing Hammer": "me3_71",
+  "Night Stretcher": "me2-5_196",
+  "Special Red Card": "me4_82",
+  "Unfair Stamp": "sv6_165",
+  "Risky Ruins": "me1_127",
+  "Basic {P} Energy": "sv3-5_207",
+  "Basic {R} Energy": "sv3_230",
+  "Basic {D} Energy": "sv6-5_98"
+ },
+ "stadium": null,
+ "me": {
+  "active": {
+   "name": "Dragapult ex",
+   "srcId": "sv6_130",
+   "hp": 320,
+   "dmg": 60,
+   "stage": "Stage2",
+   "types": [
+    "Dragon"
+   ],
+   "retreat": 1,
+   "energy": [
+    "Basic {P} Energy",
+    "Basic {R} Energy"
+   ],
+   "tools": [],
+   "attacks": [
+    {
+     "name": "Jet Headbutt",
+     "cost": [
+      "C"
+     ],
+     "dmg": 70
+    },
+    {
+     "name": "Phantom Dive",
+     "cost": [
+      "R",
+      "P"
+     ],
+     "dmg": 200
+    }
+   ]
+  },
+  "bench": [
+   {
+    "name": "Munkidori",
+    "srcId": "sv6_95",
+    "hp": 110,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Psychic"
+    ],
+    "retreat": 1,
+    "energy": [],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Mind Bend",
+      "cost": [
+       "P",
+       "C"
+      ],
+      "dmg": 60
+     }
+    ]
+   },
+   {
+    "name": "Meowth ex",
+    "srcId": "me3_62",
+    "hp": 170,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Colorless"
+    ],
+    "retreat": 1,
+    "energy": [],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Tuck Tail",
+      "cost": [
+       "C",
+       "C",
+       "C"
+      ],
+      "dmg": 60
+     }
+    ]
+   },
+   {
+    "name": "Munkidori",
+    "srcId": "sv6_95",
+    "hp": 110,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Psychic"
+    ],
+    "retreat": 1,
+    "energy": [
+     "Basic {P} Energy"
+    ],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Mind Bend",
+      "cost": [
+       "P",
+       "C"
+      ],
+      "dmg": 60
+     }
+    ]
+   },
+   {
+    "name": "Dragapult ex",
+    "srcId": "sv6_130",
+    "hp": 320,
+    "dmg": 0,
+    "stage": "Stage2",
+    "types": [
+     "Dragon"
+    ],
+    "retreat": 1,
+    "energy": [
+     "Basic {P} Energy"
+    ],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Jet Headbutt",
+      "cost": [
+       "C"
+      ],
+      "dmg": 70
+     },
+     {
+      "name": "Phantom Dive",
+      "cost": [
+       "R",
+       "P"
+      ],
+      "dmg": 200
+     }
+    ]
+   }
+  ],
+  "hand": [
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "d9b92f49-97bc-41ee-bf38-359fd9ed755c",
+    "types": []
+   },
+   {
+    "name": "Crispin",
+    "srcId": "sv7_133",
+    "entityId": "e4187e15-1197-4389-a895-e7618293e928",
+    "types": []
+   },
+   {
+    "name": "Lillie's Determination",
+    "srcId": "me1_119",
+    "entityId": "73ccb4b6-d27c-4b11-a96c-32c8adc5f315",
+    "types": []
+   },
+   {
+    "name": "Crushing Hammer",
+    "srcId": "me3_71",
+    "entityId": "23f45f01-81c7-4782-ad8f-54d18ea06ad2",
+    "types": []
+   }
+  ],
+  "discardList": [
+   {
+    "name": "Budew",
+    "srcId": "me2-5_16",
+    "entityId": "9196b6a5-e4d7-457d-ba91-2369b37bbcb6",
+    "types": [
+     "Grass"
+    ]
+   },
+   {
+    "name": "Boss's Orders",
+    "srcId": "me1_114",
+    "entityId": "14371168-c777-42ad-be2b-27cd6b5cd60e",
+    "types": []
+   },
+   {
+    "name": "Basic {D} Energy",
+    "srcId": "bw1_111",
+    "entityId": "53cc9578-6230-4808-ba75-8baa093bbd26",
+    "types": [
+     "Darkness"
+    ]
+   },
+   {
+    "name": "Poké Pad",
+    "srcId": "me3_81",
+    "entityId": "84669976-298c-4c5d-a55c-1f056c21b6b5",
+    "types": []
+   },
+   {
+    "name": "Crispin",
+    "srcId": "sv7_133",
+    "entityId": "7d95b32c-2205-4e61-944f-5d4c33d13c0d",
+    "types": []
+   },
+   {
+    "name": "Boss's Orders",
+    "srcId": "me1_114",
+    "entityId": "aa4cb816-c56e-444c-a1d7-a3e2862b3048",
+    "types": []
+   },
+   {
+    "name": "Lillie's Determination",
+    "srcId": "me1_119",
+    "entityId": "3584561f-3e84-4540-9275-84b1abb6c45b",
+    "types": []
+   },
+   {
+    "name": "Poké Pad",
+    "srcId": "me3_81",
+    "entityId": "da282086-a299-4f46-a663-05b5cf7ef99a",
+    "types": []
+   },
+   {
+    "name": "Poké Pad",
+    "srcId": "me3_81",
+    "entityId": "128cd530-97a9-4d61-9498-aa8fc86f149a",
+    "types": []
+   },
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "d2bb096a-1ed1-4605-a2fb-f7c4a93633d3",
+    "types": []
+   }
+  ],
+  "deck": 31,
+  "prize": 2
+ },
+ "opp": {
+  "active": {
+   "name": "N's Zoroark ex",
+   "srcId": "sv9_98",
+   "hp": 280,
+   "dmg": 0,
+   "stage": "Stage1",
+   "types": [
+    "Darkness"
+   ],
+   "retreat": 2,
+   "energy": [],
+   "tools": [],
+   "attacks": [
+    {
+     "name": "Night Joker",
+     "cost": [
+      "D",
+      "D"
+     ],
+     "dmg": null
+    }
+   ]
+  },
+  "bench": [
+   {
+    "name": "N's Zorua",
+    "srcId": "sv9_97",
+    "hp": 70,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Darkness"
+    ],
+    "retreat": 1,
+    "energy": [
+     "Basic {D} Energy"
+    ],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Scratch",
+      "cost": [
+       "D"
+      ],
+      "dmg": 20
+     }
+    ]
+   },
+   {
+    "name": "Munkidori",
+    "srcId": "sv6_95",
+    "hp": 110,
+    "dmg": 10,
+    "stage": "Basic",
+    "types": [
+     "Psychic"
+    ],
+    "retreat": 1,
+    "energy": [
+     "Basic {D} Energy"
+    ],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Mind Bend",
+      "cost": [
+       "P",
+       "C"
+      ],
+      "dmg": 60
+     }
+    ]
+   },
+   {
+    "name": "N's Zorua",
+    "srcId": "sv9_97",
+    "hp": 70,
+    "dmg": 10,
+    "stage": "Basic",
+    "types": [
+     "Darkness"
+    ],
+    "retreat": 1,
+    "energy": [
+     "Basic {D} Energy"
+    ],
+    "tools": [
+     "Binding Mochi"
+    ],
+    "attacks": [
+     {
+      "name": "Scratch",
+      "cost": [
+       "D"
+      ],
+      "dmg": 20
+     }
+    ]
+   },
+   {
+    "name": "Meowth ex",
+    "srcId": "me3_62",
+    "hp": 170,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Colorless"
+    ],
+    "retreat": 1,
+    "energy": [],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Tuck Tail",
+      "cost": [
+       "C",
+       "C",
+       "C"
+      ],
+      "dmg": 60
+     }
+    ]
+   },
+   {
+    "name": "N's Zekrom",
+    "srcId": "me2-5_155",
+    "hp": 130,
+    "dmg": 0,
+    "stage": "Basic",
+    "types": [
+     "Dragon"
+    ],
+    "retreat": 2,
+    "energy": [],
+    "tools": [],
+    "attacks": [
+     {
+      "name": "Shred",
+      "cost": [
+       "C",
+       "C",
+       "C"
+      ],
+      "dmg": 70
+     },
+     {
+      "name": "Rampaging Thunder",
+      "cost": [
+       "R",
+       "L",
+       "L",
+       "C"
+      ],
+      "dmg": 250
+     }
+    ]
+   }
+  ],
+  "hand": [
+   {
+    "name": "N's Zorua",
+    "srcId": "sv9_97",
+    "entityId": "0ee49afc-4054-43f9-9282-cb4dc1079e09",
+    "types": [
+     "Darkness"
+    ]
+   },
+   {
+    "name": "Black Belt's Training",
+    "srcId": "sv9_143",
+    "entityId": "3684f905-a476-46c0-a1b0-2c1b2318fc64",
+    "types": []
+   },
+   {
+    "name": "Boss's Orders",
+    "srcId": "me1_114",
+    "entityId": "e47f1919-ae56-47fe-b0df-3bef4c3e7f74",
+    "types": []
+   },
+   {
+    "name": "Ultra Ball",
+    "srcId": "me1_131",
+    "entityId": "5befbaad-e0db-4f9d-8d51-82bb2e091283",
+    "types": []
+   },
+   {
+    "name": "Ruffian",
+    "srcId": "sv9_157",
+    "entityId": "3d2244aa-f41e-4a27-b80c-7464d4744d1f",
+    "types": []
+   },
+   {
+    "name": "Transformation Tome",
+    "srcId": "me4_83",
+    "entityId": "d9d2fdf3-47b6-44dc-972f-f99c9fdf0e76",
+    "types": []
+   },
+   {
+    "name": "Transformation Tome",
+    "srcId": "me4_83",
+    "entityId": "36f8a4e4-97bd-48dc-98db-3bb48128efb7",
+    "types": []
+   },
+   {
+    "name": "Basic {D} Energy",
+    "srcId": "bw1_111",
+    "entityId": "93e83d28-dcba-4b5e-80ed-0cbe8723d4e9",
+    "types": [
+     "Darkness"
+    ]
+   }
+  ],
+  "discardList": [
+   {
+    "name": "Binding Mochi",
+    "srcId": "sv8-5_95",
+    "entityId": "c48c7722-ffa8-4135-b9b4-6c7bc634b8e8",
+    "types": []
+   },
+   {
+    "name": "Lillie's Determination",
+    "srcId": "me1_119",
+    "entityId": "a45f6ae6-9e5a-4161-9f6f-0cbad03d80b1",
+    "types": []
+   },
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "89e83860-85f8-42b6-897b-628132ebb43d",
+    "types": []
+   },
+   {
+    "name": "Special Red Card",
+    "srcId": "me4_82",
+    "entityId": "a9a3ac5e-efd4-48b3-8b26-8d6e6d771b0e",
+    "types": []
+   },
+   {
+    "name": "Budew",
+    "srcId": "me2-5_16",
+    "entityId": "f9e5ba14-4a37-4893-8c22-333afc45a34e",
+    "types": [
+     "Grass"
+    ]
+   },
+   {
+    "name": "Pecharunt ex",
+    "srcId": "sv6-5_39",
+    "entityId": "1bfe7b98-aab7-4c7c-9dbb-e4a66539bed0",
+    "types": [
+     "Darkness"
+    ]
+   },
+   {
+    "name": "N's PP Up",
+    "srcId": "sv9_153",
+    "entityId": "0b917a71-9be4-406f-827f-fa5a0962b358",
+    "types": []
+   },
+   {
+    "name": "N's Castle",
+    "srcId": "sv9_152",
+    "entityId": "62468c04-c74d-4f40-a69a-c622e7166f53",
+    "types": []
+   },
+   {
+    "name": "Tatsugiri",
+    "srcId": "sv6_131",
+    "entityId": "2ffa5d19-3c28-48ea-adee-31c1fae6454c",
+    "types": [
+     "Dragon"
+    ]
+   },
+   {
+    "name": "Cyrano",
+    "srcId": "sv8_170",
+    "entityId": "74ad0569-6c0d-4134-8911-3c8d2a99bd2a",
+    "types": []
+   },
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "104c5541-90f3-4fde-9d69-c3913c3a282c",
+    "types": []
+   },
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "9432a078-b904-4758-9c32-ceed81bfaf7a",
+    "types": []
+   },
+   {
+    "name": "Buddy-Buddy Poffin",
+    "srcId": "sv5_144",
+    "entityId": "b4563118-59d4-4427-a230-a3c6d3dd200e",
+    "types": []
+   },
+   {
+    "name": "Boss's Orders",
+    "srcId": "me1_114",
+    "entityId": "93b48b8e-25f1-4f00-8a41-2f12076d6c06",
+    "types": []
+   }
+  ],
+  "deck": 22,
+  "prize": 5
+ }
+}

@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PTCGL Prize Tracker - a standalone BepInEx overlay.
+
+    Deliberately independent of the PokeAI work: this project contains no card/game-data export,
+    no bulk card fetching and no simulator tooling. It only reads the live match state to show
+    prize / deck / opponent information. Keep it that way.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>PrizeTracker</AssemblyName>
+    <RootNamespace>PrizeTracker</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>portable</DebugType>
+    <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameRoot Condition="'$(GameRoot)' == ''">$(USERPROFILE)\The Pokémon Company International\Pokémon Trading Card Game Live</GameRoot>
+    <GameManaged Condition="'$(GameManaged)' == ''">$(GameRoot)\Pokemon TCG Live_Data\Managed</GameManaged>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(GameRoot)\BepInEx\core</BepInExCore>
+    <BepInExPlugins Condition="'$(BepInExPlugins)' == ''">$(GameRoot)\BepInEx\plugins</BepInExPlugins>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests\**" />
+    <Compile Remove="Preview\**" />
+    <None Remove="Tests\**" />
+    <None Remove="Preview\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>$(BepInExCore)\0Harmony.dll</HintPath></Reference>
+    <Reference Include="BepInEx"><HintPath>$(BepInExCore)\BepInEx.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MatchLogic"><HintPath>$(GameManaged)\MatchLogic.dll</HintPath></Reference>
+    <Reference Include="SharedLogicUtils"><HintPath>$(GameManaged)\SharedLogicUtils.dll</HintPath></Reference>
+    <Reference Include="RainierClientSDK"><HintPath>$(GameManaged)\RainierClientSDK.dll</HintPath></Reference>
+    <Reference Include="TPCI.RainierClient"><HintPath>$(GameManaged)\TPCI.RainierClient.dll</HintPath></Reference>
+    <Reference Include="TPCI.Shared.Singletons"><HintPath>$(GameManaged)\TPCI.Shared.Singletons.dll</HintPath></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(GameManaged)\Newtonsoft.Json.dll</HintPath></Reference>
+    <Reference Include="TPCIAssetBundleSystem"><HintPath>$(GameManaged)\TPCIAssetBundleSystem.dll</HintPath></Reference>
+    <Reference Include="TPCINetworkSystem"><HintPath>$(GameManaged)\TPCINetworkSystem.dll</HintPath></Reference>
+    <Reference Include="TPCI.Shared.Utilities"><HintPath>$(GameManaged)\TPCI.Shared.Utilities.dll</HintPath></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameManaged)\Unity.TextMeshPro.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameManaged)\UnityEngine.UI.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameManaged)\UnityEngine.UIModule.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine"><HintPath>$(GameManaged)\UnityEngine.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameManaged)\UnityEngine.IMGUIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(GameManaged)\UnityEngine.InputLegacyModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameManaged)\UnityEngine.TextRenderingModule.dll</HintPath></Reference>
+    <!--
+      NOT referenced: UnityEngine.ImageConversionModule, which owns EncodeToPNG / LoadImage.
+      It targets netstandard2.1 and this plugin must be net472 for BepInEx's Mono runtime, so
+      referencing it fails with CS1705. Avatars.cs calls those two methods by reflection instead -
+      they resolve fine at runtime, where the real Unity assemblies are loaded.
+    -->
+  </ItemGroup>
+
+  <Target Name="DeployToPlugins" AfterTargets="Build" Condition="Exists('$(BepInExPlugins)')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExPlugins)"
+          Retries="0" ContinueOnError="WarnAndContinue">
+      <Output TaskParameter="CopiedFiles" ItemName="_DeployedPlugin" />
+    </Copy>
+    <Message Importance="high" Condition="'@(_DeployedPlugin)' == ''"
+             Text="PLUGIN NOT DEPLOYED: close Pokemon TCG Live (it has the old DLL locked) and build again." />
+    <Message Importance="high" Condition="'@(_DeployedPlugin)' != ''"
+             Text="Plugin deployed to $(BepInExPlugins)" />
+  </Target>
+
+</Project>
