@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using MatchLogic;
 
@@ -166,6 +166,18 @@ namespace PrizeTracker.Core
                 var all = asPlayer1 ? board.GetAllPlayer1Cards() : board.GetAllPlayer2Cards();
                 if (all == null) return;
 
+                // Deduplicate by entityID, because the two views can disagree for a moment.
+                //
+                // The board's walk and matchEntities are read at slightly different points in the
+                // client's own update, so a card mid-transition can be in the DECK according to
+                // one and in hand or pending according to the other. Filtering the walk only on
+                // "not in the deck" then keeps that card AND adds it back with the known deck -
+                // one card counted twice.
+                //
+                // Measured, not theorised: a real game reported deck total 60, matched 55, hidden
+                // 6. Sixty-one cards in a sixty-card deck, with no card seen more often than the
+                // list allows, which is the signature of a duplicate rather than an intruder. It
+                // blocked the prize solve outright through the decklist sanity gate.
                 var rebuilt = new List<CardEntity>(all.Count);
                 foreach (var ce in all)
                     if (ce != null && ce.currentGamePos != want) rebuilt.Add(ce);

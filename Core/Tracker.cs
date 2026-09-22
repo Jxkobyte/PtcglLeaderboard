@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -183,6 +183,7 @@ namespace PrizeTracker.Core
         private Dictionary<string, int> _solvedPrizes;
         private int _searchLogs;
         private int _solveLogs;
+        private int _mismatchLogs;
 
         /// <summary>
         /// Optional diagnostic sink, supplied by the plugin.
@@ -292,6 +293,13 @@ namespace PrizeTracker.Core
                 PrizeSlots.Add(new PrizeSlot { Known = false });
         }
 
+        /// <summary>Card name for a key, for diagnostics. Falls back to the raw key.</summary>
+        private static string NameOf(string key)
+        {
+            try { var n = Game.NameOf(key); if (!string.IsNullOrEmpty(n)) return n; } catch { }
+            return key;
+        }
+
         /// <summary>Cards that might be prized, most likely first - only meaningful while unsolved.</summary>
         public List<PrizeRow> Likely
         {
@@ -376,6 +384,75 @@ namespace PrizeTracker.Core
                     unaccountedTotal != TotalUnknown ? "BLOCKED by the decklist sanity gate"
                     : unaccountedTotal != PrizeUnknown ? "unaccounted does not equal the prize count"
                     : "should solve"));
+            }
+
+            // When the gate blocks, say WHICH cards disagree. "5 unaccounted vs 6 hidden" names a
+            // discrepancy without naming its cause, and the cause is always a specific card:
+            // either one on the board that our list does not contain, or one we have matched more
+            // copies of than the list holds.
+            if (unaccountedTotal != TotalUnknown && Diagnostic != null && _mismatchLogs < 2)
+            {
+                _mismatchLogs++;
+                var over = new List<string>();
+                foreach (var kvp in known)
+                {
+                    int inDeck;
+                    _deck.TryGetValue(kvp.Key, out inDeck);
+                    if (kvp.Value > inDeck)
+                        over.Add(NameOf(kvp.Key) + " seen " + kvp.Value + " but list has " + inDeck);
+                }
+                var short_ = new List<string>();
+                foreach (var kvp in unaccounted) short_.Add(NameOf(kvp.Key) + " x" + kvp.Value);
+
+                Diagnostic("decklist mismatch: board has cards the list does not -> " +
+                           (over.Count == 0 ? "(none)" : string.Join("; ", over.ToArray())));
+                Diagnostic("decklist mismatch: still unaccounted -> " +
+                           (short_.Count == 0 ? "(none)" : string.Join("; ", short_.ToArray())));
+                // Where does the extra card actually live? All is the engine's ownership walk;
+                // comparing it against the individual zones says whether a card is counted in two
+                // places or the walk simply holds one more than the zones do.
+                int zoneSum = (s.Me.Active != null ? 1 : 0) + s.Me.Bench.Count + s.Me.Hand.Count +
+                              s.Me.Deck.Count + s.Me.Discard.Count + s.Me.LostZone.Count +
+                              s.Me.Pending.Count + s.Me.Prize.Count(c => c != null);
+                Diagnostic(string.Format(
+                    "decklist mismatch: zones active={0} bench={1} hand={2} deck={3} discard={4} " +
+                    "lost={5} pending={6} prize={7} => {8}; All={9} (hidden in All={10})",
+                    s.Me.Active != null ? 1 : 0, s.Me.Bench.Count, s.Me.Hand.Count, s.Me.Deck.Count,
+                    s.Me.Discard.Count, s.Me.LostZone.Count, s.Me.Pending.Count,
+                    s.Me.Prize.Count(c => c != null), zoneSum, s.Me.All.Count,
+                    s.Me.All.Count(c => !c.Known)));
+
+                // The identified cards, by name, against what the list says we should have. With
+                // zones and the ownership walk agreeing, the discrepancy has to be visible here.
+                var lines = new List<string>();
+                foreach (var kvp in known.OrderBy(k => k.Key))
+                {
+                    int inDeck;
+                    _deck.TryGetValue(kvp.Key, out inDeck);
+                    lines.Add(NameOf(kvp.Key) + " " + kvp.Value + "/" + inDeck);
+                }
+                Diagnostic("decklist mismatch: identified (seen/list) -> " +
+                           string.Join(", ", lines.ToArray()));
+
+                // What is actually in the prize slots, and in the deck the client reports? If the
+                // client is not redacting (a locally simulated match may not), a prized card can
+                // be listed in the deck AND occupy a prize slot - the same physical card counted
+                // once as identified and once as hidden, which is exactly 55 + 6 = 61.
+                var pz = new List<string>();
+                foreach (var c in s.Me.Prize)
+                    if (c != null)
+                        pz.Add((string.IsNullOrEmpty(c.SourceId) ? "hidden" : c.Name ?? c.SourceId) +
+                               "[" + (string.IsNullOrEmpty(c.EntityId) ? "-" : c.EntityId) + "]");
+                Diagnostic("decklist mismatch: prize slots -> " + string.Join(", ", pz.ToArray()));
+
+                int deckHidden = s.Me.Deck.Count(c => !c.Known);
+                Diagnostic("decklist mismatch: deck zone " + s.Me.Deck.Count + " (" + deckHidden +
+                           " hidden), hand " + s.Me.Hand.Count + " (" +
+                           s.Me.Hand.Count(c => !c.Known) + " hidden)");
+
+                Diagnostic("decklist mismatch: deck total " + _deck.Values.Sum() +
+                           ", matched " + known.Values.Sum() + ", hidden " + TotalUnknown +
+                           " (matched + hidden should equal the deck total)");
             }
 
             // Sanity gate: the unaccounted multiset should exactly fill the hidden slots. A
