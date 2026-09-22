@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Reflection;
 using BepInEx.Bootstrap;
@@ -30,9 +30,53 @@ namespace PrizeTracker.Core
     {
         private const string ScriptEngineGuid = "com.bepis.bepinex.scriptengine";
 
+        /// <summary>
+        /// Drop this file to apply a held build immediately, without touching the keyboard.
+        ///
+        /// The hold is worth keeping - losing solved prizes mid-match cannot simply be undone,
+        /// since you cannot search your deck on demand - but it should not be the PLAYER who has
+        /// to override it. Whoever made the build knows whether it is safe to apply mid-match, so
+        /// the override is a file they can write rather than a key the player has to press.
+        /// </summary>
+        public static string ReleasePath
+        {
+            get { return System.IO.Path.Combine(BepInEx.Paths.ConfigPath, "PrizeTracker/reload-now"); }
+        }
+
+        public Tracker Tracker;
+
         private object _engine;
         private FieldInfo _shouldReload, _timer, _watcher;
         private bool _held;
+
+        /// <summary>
+        /// Is there actually anything a reload would destroy?
+        ///
+        /// Holding for the whole match was too blunt: it also blocked builds that only touch
+        /// diagnostics, at exactly the moment a match is running and the diagnostics are wanted.
+        /// What a reload really costs is the SOLVED PRIZES - so hold for those, and not for the
+        /// mere fact of being in a match.
+        /// </summary>
+        /// <summary>True once, if the release marker is present. Consumes it.</summary>
+        private bool Released()
+        {
+            try
+            {
+                if (!File.Exists(ReleasePath)) return false;
+                File.Delete(ReleasePath);
+                Plugin.Log.LogWarning("reload released by marker - applying the held build now.");
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private bool WouldLoseWork()
+        {
+            if (!Game.InMatch()) return false;
+            if (Tracker == null) return false;
+            foreach (var p in Tracker.PrizeSlots) if (p.Known) return true;
+            return false;
+        }
 
         private void Start()
         {
@@ -83,7 +127,7 @@ namespace PrizeTracker.Core
 
             if (!pending) { _held = false; return; }
 
-            if (Game.InMatch())
+            if (WouldLoseWork() && !Released())
             {
                 // Keep it just out of reach. ScriptEngine subtracts unscaledDeltaTime every frame
                 // and fires at zero, so holding the countdown above zero defers without cancelling.
@@ -92,7 +136,8 @@ namespace PrizeTracker.Core
                 {
                     _held = true;
                     Plugin.Log.LogWarning("new build detected - holding the reload until this match ends "
-                                          + "(reloading now would wipe the solved prizes).");
+                                          + "(prizes are solved and a reload would wipe them). "
+                                          + "Create " + ReleasePath + " to apply it now.");
                 }
                 return;
             }
@@ -101,7 +146,7 @@ namespace PrizeTracker.Core
             {
                 _held = false;
                 try { _timer.SetValue(_engine, 0.5f); } catch { }
-                Plugin.Log.LogWarning("match over - applying the held build.");
+                Plugin.Log.LogWarning("nothing left to lose - applying the held build.");
             }
         }
     }

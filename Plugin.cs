@@ -32,6 +32,7 @@ namespace PrizeTracker
         private GameObject _host;
         private PrizeViewProbe _prizeProbe;
         private PrizeReveal _reveal;
+        private PrizeShapeProbe _shapeProbe;
         private Tracker _tracker;
         private MatchDetector _detector;
         private PerformanceTuner _perf;
@@ -93,7 +94,8 @@ namespace PrizeTracker
             Log.LogInfo("Match history: " + _history.Count + " recorded (" + historyPath + ")");
             _host.AddComponent<CardArt>();   // serves card textures to the overlay
             _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
-            _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
+            var hot = _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
+            hot.Tracker = _tracker;
             _host.AddComponent<CardAspectProbe>(); // what shape does the CLIENT draw a card texture at
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
@@ -112,6 +114,7 @@ namespace PrizeTracker
             _settings.OnChanged = SaveSettings;
 
             _prizeProbe = _host.AddComponent<PrizeViewProbe>();
+            _shapeProbe = _host.AddComponent<PrizeShapeProbe>();
             _reveal = _host.AddComponent<PrizeReveal>();
             _reveal.Tracker = _tracker;
 
@@ -164,6 +167,7 @@ namespace PrizeTracker
             // to show, hide or toggle - it appears exactly when you open your prizes.
             bool inMatch = Game.InMatch();
             if (_prizeProbe != null) _prizeProbe.InMatch = inMatch;
+            if (_shapeProbe != null) _shapeProbe.InMatch = inMatch;
             if (_reveal != null) _reveal.InMatch = inMatch;
 
             if (_detector == null) return;

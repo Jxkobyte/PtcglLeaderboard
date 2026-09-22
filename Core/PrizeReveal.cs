@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TPCI.Rainier.Match.Cards;
 using UnityEngine;
@@ -89,6 +89,21 @@ namespace PrizeTracker.Core
             var owner = FindOwnPrizeController();
             if (owner == null) return;
 
+            // NEVER while the client is asking which prize to take.
+            //
+            // Solving yields the SET of six cards and never which slot holds which - the client
+            // identifies Deck, Hand, Active and Pending entities and never the prize entities
+            // individually. Painting a card onto a numbered slot therefore asserts something we do
+            // not know, and on the "Choose 1 Prize card" prompt that is not merely cosmetic: it
+            // invites picking a slot to get the card shown on it, which is a coin flip dressed up
+            // as information.
+            //
+            // PrizeCardSelectionMenu runs a state machine over the same slots for both jobs, and
+            // exposes it, so this is the client's own distinction rather than a guess about which
+            // screen is open: VIEW is looking at your prizes, SELECT is choosing one.
+            var menu = owner.prizeDisplayMenu;
+            if (menu != null && menu.IsAwaitingSelection) { Undress(owner); return; }
+
             var cards = owner.SlottedPrizes;
             if (cards == null) return;
 
@@ -109,22 +124,65 @@ namespace PrizeTracker.Core
             ShowDrawerSlotsFaceUp(n);
         }
 
-        /// <summary>Load the face and flip the card, once per card.</summary>
+        /// <summary>
+        /// Load the face and turn the card around, once per card.
+        ///
+        /// Probing a real match showed a face-down prize and a face-up card in hand are IDENTICAL
+        /// in every respect that was suspected of mattering - both viewMode BIG, both with cardFront
+        /// and CardSideBack enabled on the same materials, both already carrying a loaded graphic.
+        /// The single difference is which way the card faces: worldFwd (0,1,0) against (0,-1,0).
+        ///
+        /// That probe also overturned the original approach here. visuallyRevealed is ALREADY TRUE
+        /// on a face-down prize, and QueuePrizeRevealFlipAnim is guarded by !visuallyRevealed, so
+        /// the previous version of this method would have called it and had it do nothing at all -
+        /// silently, and only in a real match. Clearing the flag first lets the client's own flip
+        /// animation run, and its completion callback sets the flag back.
+        /// </summary>
         private void Dress(PrizeController owner, Card3D card, string sourceId)
         {
             int id = card.GetInstanceID();
             if (!_dressed.Add(id)) return;
 
             var view = card.view;
-            if (view == null || view.graphic == null) return;
+            if (view == null || view.graphic == null)
+            {
+                Plugin.Log.LogWarning("prize reveal: " + card.name + " has no view/graphic");
+                return;
+            }
 
-            // The client's own loader: it looks the card up in the card database and works out the
-            // asset bundle itself.
+            var before = view.graphic.CardId;
+
+            // The client's own loader - it looks the card up in the card database and works out
+            // the asset bundle itself, so none of our bundle-name derivation applies here.
             view.graphic.Init(sourceId, -1, null);
 
-            // The client's own reveal animation, used when an effect reveals one of your prizes.
-            // It is a no-op on a card that is already face up, so calling it is safe.
+            // The client's own reveal animation, as used when an effect reveals one of your prizes.
+            card.SetVisuallyRevealed(false);
             owner.QueuePrizeRevealFlipAnim(card);
+
+            Plugin.Log.LogWarning("prize reveal: " + card.name + " graphic " + before + " -> " + sourceId
+                + "; fwd " + card.transform.forward + " revealed=" + card.visuallyRevealed);
+        }
+
+        /// <summary>
+        /// Put everything back the way the client had it.
+        ///
+        /// Leaving the slots turned around would strand a face-up prize on the selection prompt,
+        /// and re-dressing must be allowed to happen again afterwards, so the record of what has
+        /// been dressed is cleared too.
+        /// </summary>
+        private void Undress(PrizeController owner)
+        {
+            if (_dressed.Count == 0) return;
+            _dressed.Clear();
+            _signature = null;
+
+            foreach (var slot in Resources.FindObjectsOfTypeAll<global::PrizeSlot>())
+            {
+                if (slot == null || slot.SlotMover == null) continue;
+                if (!slot.gameObject.activeInHierarchy) continue;
+                slot.SlotMover.transform.localRotation = Quaternion.identity;
+            }
         }
 
         /// <summary>
