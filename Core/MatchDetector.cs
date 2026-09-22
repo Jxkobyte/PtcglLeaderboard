@@ -30,6 +30,7 @@ namespace PrizeTracker.Core
 
         // match-history recording
         public MatchHistory History;
+        public Leaderboard Board;
         private DateTime _matchStart;
         private bool _recorded;
 
@@ -137,6 +138,9 @@ namespace PrizeTracker.Core
                 Log = BattleLogCapture.Instance != null ? (BattleLogCapture.Instance.Capture() ?? "") : "",
             };
             History.Add(rec);
+            // The client refreshes SeasonRank from the server a few seconds after the result;
+            // the leaderboard waits for that rather than sending last match's numbers.
+            if (Board != null) Board.SubmitAfterMatchDelayed(12f);
             // The end-game avatars are only on screen for a short while after this point.
             StartCoroutine(Avatars.CaptureAfterGame(this, rec));
             _log.LogInfo(string.Format("Match recorded: {0} vs {1} ({2}) - {3}; battle log {4}",

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -22,14 +22,14 @@ namespace PrizeTracker.Core
     {
         private const string SectionName = "PrizeTrackerSettings";
 
-        public PerformanceTuner Perf;
+        public Leaderboard Board;
         public Action OnChanged;
 
         private float _next;
         private bool _logged;
         private bool _failed;
 
-        private TextMeshProUGUI _fpsValue, _unfocusedValue, _badgeValue;
+        private TextMeshProUGUI _badgeValue, _boardValue, _boardName;
 
         private Transform _dumpRoot;
 
@@ -268,12 +268,14 @@ namespace PrizeTracker.Core
         private void BuildRows(RectTransform card, Transform panel, TextMeshProUGUI template)
         {
             float y = 96f;   // clear of the card's title
-            _fpsValue = AddRow(panel, template, "FRAME RATE CAP", ref y,
-                               () => Step(-1), () => Step(+1));
-            _unfocusedValue = AddRow(panel, template, "WHEN NOT FOCUSED", ref y,
-                               () => StepUnfocused(-1), () => StepUnfocused(+1));
             _badgeValue = AddToggle(panel, template, "DECK WIN RATES", ref y,
                                () => DeckBadge.Enabled = !DeckBadge.Enabled);
+
+            // Opt-in for sharing the season record. Viewing the board never needs it, so the
+            // toggle governs exactly one thing: whether anything leaves this machine.
+            _boardValue = AddToggle(panel, template, "COMMUNITY LEADERBOARD", ref y,
+                               () => { if (Board != null) Board.Enabled = !Board.Enabled; });
+            _boardName = AddRow(panel, template, "LEADERBOARD NAME", ref y, null, null);
 
             // Grow the card to fit. Its height came from the card we cloned, sized for that card's
             // contents - our rows are absolutely positioned, so nothing else tells the layout how
@@ -344,19 +346,6 @@ namespace PrizeTracker.Core
             return lbl;
         }
 
-        private static readonly int[] Steps = { 0, 30, 45, 60, 75, 90, 120, 144, 165, 240 };
-
-        private void Step(int dir)
-        {
-            if (Perf == null) return;
-            int i = Array.IndexOf(Steps, Perf.MatchFps);
-            if (i < 0) i = Array.FindLastIndex(Steps, v => v < Perf.MatchFps);
-            if (i < 0) i = 0;
-            Perf.MatchFps = Steps[Mathf.Clamp(i + dir, 0, Steps.Length - 1)];
-            Perf.MenuFps = Perf.MatchFps;
-            Perf.Apply();
-        }
-
         /// <summary>
         /// Drive the height through whichever mechanism this list actually honours.
         ///
@@ -378,18 +367,6 @@ namespace PrizeTracker.Core
             le.preferredHeight = h;
 
             card.sizeDelta = new Vector2(card.sizeDelta.x, h);
-        }
-
-        private static readonly int[] UnfocusedSteps = { 0, 5, 10, 15, 20, 30, 60 };
-
-        private void StepUnfocused(int dir)
-        {
-            if (Perf == null) return;
-            int i = Array.IndexOf(UnfocusedSteps, Perf.UnfocusedFps);
-            if (i < 0) i = Array.FindLastIndex(UnfocusedSteps, v => v < Perf.UnfocusedFps);
-            if (i < 0) i = 0;
-            Perf.UnfocusedFps = UnfocusedSteps[Mathf.Clamp(i + dir, 0, UnfocusedSteps.Length - 1)];
-            Perf.Apply();
         }
 
         /// <summary>A caption with an ON/OFF button, matching the steppers' proportions.</summary>
@@ -430,14 +407,15 @@ namespace PrizeTracker.Core
 
         private void Refresh()
         {
-            if (Perf != null)
-            {
-                if (_fpsValue != null)
-                    _fpsValue.text = Perf.MatchFps <= 0 ? "UNCAPPED" : Perf.MatchFps.ToString();
-                if (_unfocusedValue != null)
-                    _unfocusedValue.text = Perf.UnfocusedFps <= 0 ? "UNCAPPED" : Perf.UnfocusedFps.ToString();
-            }
             SetToggle(_badgeValue, DeckBadge.Enabled);
+            SetToggle(_boardValue, Board != null && Board.Enabled);
+            if (_boardName != null)
+            {
+                var name = Board != null ? Board.EffectiveName : "";
+                // The name comes from the game once a match has been played, or from the config
+                // file's DisplayName if the player wants something else on the board.
+                _boardName.text = string.IsNullOrEmpty(name) ? "(your in-game name)" : name;
+            }
         }
 
         private static void Place(RectTransform rt, float ax, float ay, float px, float py,

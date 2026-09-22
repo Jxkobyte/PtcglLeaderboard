@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -22,11 +22,19 @@ namespace PrizeTracker.Core
     /// </summary>
     internal class NavTab : MonoBehaviour
     {
-        private const string TabName = "PrizeTrackerHistoryTab";
-        private const string Caption = "MATCH HISTORY";
+        // One instance per tab. Defaults are the original Match History tab; the leaderboard sets
+        // its own name, caption and position.
+        public string TabName = "PrizeTrackerHistoryTab";
+        public string Caption = "MATCH HISTORY";
+
+        /// <summary>
+        /// The caption of the real tab this one goes AFTER. "DECKS" puts it second; "CARD DEX"
+        /// puts it at the end of the text tabs, just before the level/currency widgets.
+        /// </summary>
+        public string InsertAfter = "DECKS";
 
         public MatchHistory History;
-        public HistoryScreen Screen;
+        public HistoryScreen Screen;    // legacy overlay fallback; may be null for a native-only tab
 
         private float _next;
         private int _reports;
@@ -288,7 +296,7 @@ namespace PrizeTracker.Core
             catch (Exception e)
             {
                 _failed = true;
-                Plugin.Log.LogWarning("match history tab disabled: " + e.Message);
+                Plugin.Log.LogWarning(Caption + " tab disabled: " + e.Message);
             }
         }
 
@@ -315,7 +323,7 @@ namespace PrizeTracker.Core
             var copy = UnityEngine.Object.Instantiate(tabRoot.gameObject, container);
             copy.name = TabName;
             copy.SetActive(true);
-            copy.transform.SetSiblingIndex(tabRoot.GetSiblingIndex() + 1);
+            copy.transform.SetSiblingIndex(InsertIndex(container, tabRoot));
 
             // Strip ONE thing: the localiser.
             //
@@ -369,7 +377,7 @@ namespace PrizeTracker.Core
             btn.interactable = true;
             btn.onClick.AddListener(() =>
             {
-                Plugin.Log.LogInfo("match history tab clicked.");
+                Plugin.Log.LogInfo(Caption + " tab clicked.");
                 if (Screen != null) Screen.Toggle();
             });
             catcher.transform.SetAsLastSibling();
@@ -384,8 +392,8 @@ namespace PrizeTracker.Core
             exit.callback.AddListener(_ => { _hovering = false; RefreshStyle(); });
             trigger.triggers.Add(exit);
 
-            Plugin.Log.LogInfo("match history tab added: cloned \"" + tabRoot.name + "\" into \"" +
-                               container.name + "\".");
+            Plugin.Log.LogInfo(Caption + " tab added: cloned \"" + tabRoot.name + "\" into \"" +
+                               container.name + "\" after \"" + InsertAfter + "\".");
             foreach (Transform sib in container)
             {
                 var lbl = sib.GetComponentInChildren<TextMeshProUGUI>(true);
@@ -395,6 +403,25 @@ namespace PrizeTracker.Core
                                    (lbl != null ? (lbl.text ?? "").Trim() : "") + "\" color=" +
                                    (lbl != null ? lbl.color.ToString() : "?") + " active=[" + active + "]");
             }
+        }
+
+        /// <summary>
+        /// The sibling index for the clone: right after the tab whose caption is InsertAfter, or
+        /// right after the cloned tab if that caption is not in the bar. Our OWN earlier tabs are
+        /// skipped when matching, so two of ours never fight over the same slot.
+        /// </summary>
+        private int InsertIndex(Transform container, Transform tabRoot)
+        {
+            int after = -1;
+            foreach (Transform sib in container)
+            {
+                if (sib.name.StartsWith("PrizeTracker", StringComparison.Ordinal)) continue;
+                var lbl = sib.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (lbl == null) continue;
+                if (string.Equals((lbl.text ?? "").Trim(), InsertAfter, StringComparison.OrdinalIgnoreCase))
+                    after = sib.GetSiblingIndex();
+            }
+            return (after >= 0 ? after : tabRoot.GetSiblingIndex()) + 1;
         }
 
         /// <summary>
@@ -460,7 +487,7 @@ namespace PrizeTracker.Core
                              .Distinct().Take(28).ToArray();
             if (seen.Length == 0 || _reports >= 4) return;
             _reports++;
-            Plugin.Log.LogInfo("match history tab: " + why + ". visible labels: " +
+            Plugin.Log.LogInfo(Caption + " tab: " + why + ". visible labels: " +
                                string.Join(" | ", seen));
         }
     }

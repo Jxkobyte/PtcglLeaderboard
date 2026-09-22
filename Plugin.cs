@@ -35,15 +35,18 @@ namespace PrizeTracker
         private PrizeShapeProbe _shapeProbe;
         private Tracker _tracker;
         private MatchDetector _detector;
-        private PerformanceTuner _perf;
         private MatchHistory _history;
         private SettingsSection _settings;
+        private Leaderboard _board;
+        private Season _season;
 
         // persisted settings
-        private ConfigEntry<bool> _cfgFpsEnabled;
-        private ConfigEntry<int> _cfgMatchFps, _cfgMenuFps, _cfgUnfocusedFps;
         private ConfigEntry<float> _cfgX, _cfgY, _cfgW, _cfgH;
         private ConfigEntry<bool> _cfgDeckBadge;
+
+        // community leaderboard
+        private ConfigEntry<bool> _cfgLbEnabled;
+        private ConfigEntry<string> _cfgLbName, _cfgLbLearnedName, _cfgLbApi, _cfgLbPlayerId;
 
         private void Awake()
         {
@@ -75,8 +78,16 @@ namespace PrizeTracker
             // what it expects it installs nothing and says so, and the overlay screen above keeps
             // working - so the feature degrades rather than disappearing.
             var native = _host.AddComponent<NativeScreenInstaller>();
-            native.History = _history;
             native.Tab = nav;
+            native.ScreenName = "PrizeTrackerMatchHistoryScreen";
+            native.Label = "history";
+            var history = _history;
+            native.Attach = go =>
+            {
+                var s = go.AddComponent<NativeHistoryScreen>();
+                s.History = history;
+                return s;
+            };
             native.SelfTest = Config.Bind("Debug", "SelfTestOpenHistoryOnStart", false,
                 "Open the Match History screen once at startup and log the result. For verifying "
                 + "the screen without needing to drive the mouse.").Value;
@@ -92,6 +103,50 @@ namespace PrizeTracker
             }
             catch (Exception e) { Log.LogWarning("deck screen patch failed: " + e.Message); }
             Log.LogInfo("Match history: " + _history.Count + " recorded (" + historyPath + ")");
+            // ---- community leaderboard -------------------------------------------------
+            // Season id, end date and the league ladder, from the client's own cached config
+            // documents - the same response the client reads.
+            _season = Season.Load(Season.DefaultCacheDir());
+            Log.LogInfo(_season == null
+                ? "season: no cached season config found"
+                : "season " + _season.Id + " ends " +
+                  (_season.EndUtc.HasValue ? _season.EndUtc.Value.ToString("u") : "?") +
+                  " (" + _season.Leagues.Count + " leagues)");
+
+            if (string.IsNullOrEmpty(_cfgLbPlayerId.Value))
+            {
+                _cfgLbPlayerId.Value = Leaderboard.NewPlayerId();
+                Log.LogInfo("leaderboard: generated player id");
+            }
+            _board = _host.AddComponent<Leaderboard>();
+            _board.Enabled = _cfgLbEnabled.Value;
+            _board.DisplayName = _cfgLbName.Value;
+            _board.ApiBase = _cfgLbApi.Value;
+            _board.PlayerId = _cfgLbPlayerId.Value;
+            _board.Season = _season;
+            _board.History = _history;
+            _board.OnLearnedName = n => { _cfgLbLearnedName.Value = n; };
+            if (!string.IsNullOrEmpty(_cfgLbLearnedName.Value)) _board.SetLearnedName(_cfgLbLearnedName.Value);
+
+            var lbTab = _host.AddComponent<NavTab>();
+            lbTab.TabName = "PrizeTrackerLeaderboardTab";
+            lbTab.Caption = "LEADERBOARD";
+            lbTab.InsertAfter = "CARD DEX";     // the end of the text tabs
+            lbTab.History = _history;
+
+            var lbNative = _host.AddComponent<NativeScreenInstaller>();
+            lbNative.Tab = lbTab;
+            lbNative.ScreenName = "PrizeTrackerLeaderboardScreen";
+            lbNative.Label = "leaderboard";
+            var board = _board; var season = _season;
+            lbNative.Attach = go =>
+            {
+                var s = go.AddComponent<NativeLeaderboardScreen>();
+                s.Board = board;
+                s.Season = season;
+                return s;
+            };
+
             _host.AddComponent<CardArt>();   // serves card textures to the overlay
             _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
             _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
@@ -99,17 +154,8 @@ namespace PrizeTracker
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
 
-            _perf = _host.AddComponent<PerformanceTuner>();
-            _perf.Enabled = _cfgFpsEnabled.Value;
-            _perf.MatchFps = _cfgMatchFps.Value;
-            _perf.MenuFps = _cfgMenuFps.Value;
-            _perf.UnfocusedFps = _cfgUnfocusedFps.Value;
-            _perf.Apply();
-
-            // Must come AFTER _perf exists - wiring it earlier passed a null and the frame-cap
-            // row silently did nothing.
             _settings = _host.AddComponent<SettingsSection>();
-            _settings.Perf = _perf;
+            _settings.Board = _board;
             _settings.OnChanged = SaveSettings;
 
             _prizeProbe = _host.AddComponent<PrizeViewProbe>();
@@ -120,6 +166,7 @@ namespace PrizeTracker
 
             _detector = _host.AddComponent<MatchDetector>();
             _detector.History = _history;
+            _detector.Board = _board;
             _detector.Initialize(Log, _tracker);
 
             Log.LogWarning(NAME + " v" + VERSION + " loaded. F3 reload deck, F4 clipboard deck, F6 hot reload, F8 dump UI.");
@@ -135,26 +182,24 @@ namespace PrizeTracker
             _cfgDeckBadge = Config.Bind("Overlay", "ShowDeckWinrates", true,
                 "Draw each deck's win/loss record onto the game's own deck tiles in the deck screen.");
 
-            _cfgFpsEnabled = Config.Bind("Performance", "LimitFrameRate", true,
-                "Cap the client's frame rate. PTCGL otherwise renders a static board at hundreds of fps.");
-            _cfgMatchFps = Config.Bind("Performance", "MatchFps", 60,
-                "Frame cap while in a match. 0 = uncapped.");
-            _cfgMenuFps = Config.Bind("Performance", "MenuFps", 60,
-                "Frame cap in menus / deck builder. 0 = uncapped.");
-            _cfgUnfocusedFps = Config.Bind("Performance", "UnfocusedFps", 10,
-                "Frame cap while the game window is not focused. 0 = uncapped.");
+            _cfgLbEnabled = Config.Bind("Leaderboard", "Enabled", false,
+                "Share your season record (exp, wins, losses) with the community leaderboard after each " +
+                "match. Off by default. Viewing the board never requires this.");
+            _cfgLbName = Config.Bind("Leaderboard", "DisplayName", "",
+                "Name shown on the leaderboard. Leave empty to use your in-game name.");
+            _cfgLbLearnedName = Config.Bind("Leaderboard", "InGameName", "",
+                "Your in-game name, learned during a match. Managed automatically.");
+            _cfgLbApi = Config.Bind("Leaderboard", "Server", "",
+                "Base URL of the leaderboard service, e.g. https://prizetracker-leaderboard.example.workers.dev");
+            _cfgLbPlayerId = Config.Bind("Leaderboard", "PlayerId", "",
+                "Random id identifying you on the leaderboard. Generated once. Not your account id.");
+
         }
 
         private void SaveSettings()
         {
-            if (_perf == null) return;
-
             _cfgDeckBadge.Value = DeckBadge.Enabled;
-            _cfgFpsEnabled.Value = _perf.Enabled;
-            _cfgMatchFps.Value = _perf.MatchFps;
-            _cfgMenuFps.Value = _perf.MenuFps;
-            _cfgUnfocusedFps.Value = _perf.UnfocusedFps;
-            _perf.Apply();
+            if (_board != null) _cfgLbEnabled.Value = _board.Enabled;
         }
 
         private void Update()
@@ -210,6 +255,8 @@ namespace PrizeTracker
                 "PrizeTrackerSettings",            // card in the client's Settings screen
                 "PrizeTrackerHistoryCanvas",       // fallback overlay canvas
                 "PrizeTrackerSlotArt",             // art painted into prize slots (old approach)
+                "PrizeTrackerLeaderboardTab",      // second clone in the top bar
+                "PrizeTrackerLeaderboardScreen",   // its screen under InactiveScreens
             })
             {
                 try { DestroyAllNamed(name); } catch { }

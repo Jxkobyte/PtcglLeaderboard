@@ -1,0 +1,11 @@
+name = "prizetracker-leaderboard"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+
+# Create the database once with:  npx wrangler d1 create prizetracker-leaderboard
+# then paste the database_id it prints here, and apply the schema with:
+#   npx wrangler d1 execute prizetracker-leaderboard --remote --file=schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "prizetracker-leaderboard"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"

@@ -41,23 +41,40 @@ namespace PrizeTracker.Core
         public Texture Get(string itemId)
         {
             if (string.IsNullOrEmpty(itemId)) return null;
+            // A customisation item lives in a bundle named after it plus the thumbnail suffix,
+            // and the asset inside carries that same name.
+            return Get(itemId + "-t", itemId + "-t", itemId);
+        }
 
+        /// <summary>
+        /// A named asset from a named bundle - the general form. The league badges use it:
+        /// FriendButtonEnhancedCellView.LoadAssetBundleImage loads bundle "leagueicons" and pulls
+        /// rankIcon_Frame_* / rankIcon_Image_* out of it by name.
+        /// </summary>
+        public Texture Get(string bundleName, string assetName)
+        {
+            if (string.IsNullOrEmpty(bundleName) || string.IsNullOrEmpty(assetName)) return null;
+            return Get(bundleName, assetName, bundleName + "/" + assetName);
+        }
+
+        private Texture Get(string bundleName, string assetName, string key)
+        {
             Texture tex;
-            if (_cache.TryGetValue(itemId, out tex))
+            if (_cache.TryGetValue(key, out tex))
             {
                 // A Unity object can be destroyed underneath us when its bundle is unloaded, and
                 // the managed reference stays non-null when that happens.
                 if (tex != null) return tex;
-                _cache.Remove(itemId);
+                _cache.Remove(key);
             }
 
-            if (_failed.Contains(itemId) || _inFlight.Contains(itemId)) return null;
-            _inFlight.Add(itemId);
-            StartCoroutine(Load(itemId));
+            if (_failed.Contains(key) || _inFlight.Contains(key)) return null;
+            _inFlight.Add(key);
+            StartCoroutine(Load(bundleName, assetName, key));
             return null;
         }
 
-        private IEnumerator Load(string itemId)
+        private IEnumerator Load(string bundleName, string assetName, string itemId)
         {
             AssetBundleManager mgr = null;
             try { mgr = AssetBundleManager.instance; } catch { }
@@ -67,8 +84,6 @@ namespace PrizeTracker.Core
                 _inFlight.Remove(itemId);
                 yield break;
             }
-
-            var bundleName = itemId + "-t";
 
             IEnumerator load = null;
             try
@@ -86,7 +101,7 @@ namespace PrizeTracker.Core
             var request = new AssetBundleManager.AssetRequest<Texture>
             {
                 bundleName = bundleName,
-                assetName = bundleName,
+                assetName = assetName,
             };
 
             IEnumerator fetch = null;

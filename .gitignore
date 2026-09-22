@@ -5,3 +5,5 @@ obj/
 .vs/
 preview.html
 board.html
+leaderboard/node_modules/
+leaderboard/.wrangler/

@@ -273,6 +273,25 @@ namespace PrizeTracker.Core
         }
 
         /// <summary>The opponent's display name, or empty if it cannot be read.</summary>
+        /// <summary>
+        /// Our own in-game screen name, readable only while a match is running - it comes from the
+        /// match's player list, matched on our account id. Callers remember it for use outside.
+        /// </summary>
+        public static string MyName()
+        {
+            try
+            {
+                var info = Info();
+                var all = NetworkMatchController.playerDetails;
+                if (all == null || info == null || string.IsNullOrEmpty(info.accountID)) return "";
+                foreach (var p in all)
+                    if (p != null && p.playerId == info.accountID && !string.IsNullOrEmpty(p.playerName))
+                        return p.playerName;
+            }
+            catch { }
+            return "";
+        }
+
         public static string OpponentName(global::RainierClientSDK.MatchInfo info)
         {
             try

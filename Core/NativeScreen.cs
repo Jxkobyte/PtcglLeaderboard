@@ -24,7 +24,7 @@ namespace PrizeTracker.Core
     /// already uses the wanted font asset (which inherits its material too), and sprites by name
     /// from the client's own loaded set. See GameArt below.
     /// </summary>
-    internal class NativeHistoryScreen : HUBScreenController
+    internal class NativeHistoryScreen : HUBScreenController, INativeScreen
     {
         public MatchHistory History;
 
