@@ -28,6 +28,20 @@ namespace PrizeTracker.Core
         public static MatchHistory History;
         public static bool Enabled = true;
         private static bool _loggedFailure;
+        // The deck tile is LIGHT, so these have to be dark to be read at all. The first set was
+        // picked for a dark background - an even record came out at (0.92, 0.93, 0.96), which is
+        // very nearly white, so "2-2" was invisible against the tile it sits on.
+        //
+        // Colour still carries the result, but only as a tint on something already legible:
+        // black by default, darkened green or red when the record leans one way.
+        private static readonly Color Even = new Color(0.10f, 0.11f, 0.13f, 1f);
+        private static readonly Color Winning = new Color(0.09f, 0.42f, 0.20f, 1f);
+        private static readonly Color Losing = new Color(0.62f, 0.12f, 0.12f, 1f);
+
+        // A deck with no matches is still shown, just quieter - dark enough to read, light enough
+        // to say "nothing here yet" rather than "a real record of nought and nought".
+        private static readonly Color Unplayed = new Color(0.42f, 0.44f, 0.48f, 1f);
+
         private static bool _loggedApplied;
         private static bool _loggedNoAnchor;
         private static int _applied;
@@ -81,16 +95,16 @@ namespace PrizeTracker.Core
                     // was worse than useless: a deck you have not played and a badge that is not
                     // working look exactly the same.
                     label.text = "0-0";
-                    label.color = new Color(0.62f, 0.65f, 0.72f);
+                    label.color = Unplayed;
                     return;
                 }
 
                 // Record only. The percentage was redundant beside it and made the badge read as
                 // a statistic rather than as part of the tile.
                 label.text = w.Wins + "-" + w.Losses;
-                label.color = w.Rate >= 0.55 ? new Color(0.40f, 0.85f, 0.55f)
-                            : w.Rate < 0.45 ? new Color(1.00f, 0.55f, 0.45f)
-                            : new Color(0.92f, 0.93f, 0.96f);
+                label.color = w.Rate >= 0.55 ? Winning
+                            : w.Rate < 0.45 ? Losing
+                            : Even;
             }
             catch (Exception e)
             {
