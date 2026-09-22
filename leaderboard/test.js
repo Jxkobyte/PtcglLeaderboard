@@ -29,10 +29,12 @@ async function get(e, c, path) {
   return { status: res.status, body: await res.json() };
 }
 
+// master: true throughout - the board ranks Master (Arceus) players only, and the CLIENT decides
+// who is one, because only it has the season config that says where Master begins.
 const base = {
   playerId: 'player-aaaaaaaa', displayName: 'Jakobi', seasonId: 54,
   exp: 300, wins: 20, losses: 10, seasonMatches: 30, consecutiveWins: 2, localMatches: 29,
-  endDate: '2026-11-05T17:00:00Z',
+  elo: 1500, master: true, endDate: '2026-11-05T17:00:00Z',
 };
 
 test('a clean snapshot is accepted, ranked, and appears on the board', async () => {
@@ -51,21 +53,46 @@ test('a clean snapshot is accepted, ranked, and appears on the board', async () 
   assert.equal(b.body.players[0].rank, 1);
 });
 
-test('the board orders by exp, then by matches played', async () => {
+test('the board orders by elo, then by matches played', async () => {
   const e = env(), c = clock();
-  await post(e, c, { ...base, playerId: 'player-low00000', displayName: 'Low', exp: 100 });
+  await post(e, c, { ...base, playerId: 'player-low00000', displayName: 'Low', elo: 1400 });
   c.t += 100;
-  await post(e, c, { ...base, playerId: 'player-high0000', displayName: 'High', exp: 900 });
+  await post(e, c, { ...base, playerId: 'player-high0000', displayName: 'High', elo: 2100 });
   c.t += 100;
-  await post(e, c, { ...base, playerId: 'player-mid00000', displayName: 'MidMore', exp: 500, wins: 40, losses: 10, seasonMatches: 50, localMatches: 0 });
+  await post(e, c, { ...base, playerId: 'player-mid00000', displayName: 'MidMore', elo: 1700, wins: 40, losses: 10, seasonMatches: 50, localMatches: 0 });
   c.t += 100;
-  await post(e, c, { ...base, playerId: 'player-mid11111', displayName: 'MidLess', exp: 500, wins: 5, losses: 5, seasonMatches: 10, localMatches: 0 });
+  await post(e, c, { ...base, playerId: 'player-mid11111', displayName: 'MidLess', elo: 1700, wins: 5, losses: 5, seasonMatches: 10, localMatches: 0 });
 
   const b = await get(e, c, '/v1/leaderboard?player=player-mid11111');
   assert.deepEqual(b.body.players.map(p => p.displayName), ['High', 'MidMore', 'MidLess', 'Low']);
   assert.deepEqual(b.body.players.map(p => p.rank), [1, 2, 3, 4]);
   assert.equal(b.body.me.displayName, 'MidLess');
   assert.equal(b.body.me.rank, 3);
+});
+
+test('players below Master are recorded but never ranked', async () => {
+  const e = env(), c = clock();
+  await post(e, c, { ...base, playerId: 'player-master01', displayName: 'Arceus', elo: 1900 });
+  c.t += 100;
+  const below = await post(e, c, {
+    ...base, playerId: 'player-ultra001', displayName: 'Ultra', exp: 529, elo: 1500,
+    master: false, localMatches: 0,
+  });
+  assert.equal(below.status, 200);
+  assert.equal(below.body.ranked, false);
+  assert.equal(below.body.rank, 0);
+
+  const b = await get(e, c, '/v1/leaderboard?player=player-ultra001');
+  assert.deepEqual(b.body.players.map(p => p.displayName), ['Arceus']);
+  assert.equal(b.body.total, 1);
+
+  // Their record still exists, and says plainly that it is not ranked.
+  assert.equal(b.body.me.displayName, 'Ultra');
+  assert.equal(b.body.me.master, false);
+  assert.equal(b.body.me.rank, 0);
+  const p = await get(e, c, '/v1/player/player-ultra001');
+  assert.equal(p.body.standing.elo, 1500);
+  assert.equal(p.body.snapshots.length, 1);
 });
 
 test('submitting again too soon is refused, and the second snapshot updates the standing', async () => {

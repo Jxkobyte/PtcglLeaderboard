@@ -104,14 +104,14 @@ async function postSnapshot(request, env, now) {
             s.elo, s.localMatches, s.clientTs, t, JSON.stringify(flags)),
     env.DB.prepare(
       'INSERT INTO standing (season_id, player_id, display_name, exp, wins, losses, season_matches, ' +
-      'consecutive_wins, elo, snapshots, first_seen, last_seen, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+      'consecutive_wins, elo, master, snapshots, first_seen, last_seen, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT(season_id, player_id) DO UPDATE SET display_name = excluded.display_name, ' +
       'exp = excluded.exp, wins = excluded.wins, losses = excluded.losses, ' +
       'season_matches = excluded.season_matches, consecutive_wins = excluded.consecutive_wins, ' +
-      'elo = excluded.elo, snapshots = excluded.snapshots, last_seen = excluded.last_seen, ' +
-      'flags = excluded.flags')
+      'elo = excluded.elo, master = excluded.master, snapshots = excluded.snapshots, ' +
+      'last_seen = excluded.last_seen, flags = excluded.flags')
       .bind(s.seasonId, s.playerId, s.displayName, s.exp, s.wins, s.losses, s.seasonMatches,
-            s.consecutiveWins, s.elo, snapshots, firstSeen, t, JSON.stringify(unionFlags)),
+            s.consecutiveWins, s.elo, s.master, snapshots, firstSeen, t, JSON.stringify(unionFlags)),
   ];
   if (s.endDate) {
     writes.push(env.DB.prepare(
@@ -123,8 +123,8 @@ async function postSnapshot(request, env, now) {
 
   if (s.endDate) await adoptConsensusEndDate(env, s.seasonId);
 
-  const rank = await rankOf(env, s.seasonId, s.exp, s.seasonMatches);
-  return json({ ok: true, flags, rank });
+  const rank = await rankOf(env, s.seasonId, s.elo, s.seasonMatches, s.master);
+  return json({ ok: true, flags, rank, ranked: s.master === 1 });
 }
 
 /**
@@ -206,6 +206,7 @@ export function validateSnapshot(b) {
 
   const consecutiveWins = int(b.consecutiveWins, 0, 100000) ?? 0;
   const elo = int(b.elo, 0, 100000) ?? 0;
+  const master = b.master === true || b.master === 1 ? 1 : 0;
   const localMatches = int(b.localMatches, 0, 200000) ?? 0;
   const clientTs = int(b.clientTs, 0, 4102444800) ?? null;
 
@@ -215,7 +216,7 @@ export function validateSnapshot(b) {
   }
 
   return { value: { playerId, displayName, seasonId, exp, wins, losses, seasonMatches,
-                    consecutiveWins, elo, localMatches, clientTs, endDate } };
+                    consecutiveWins, elo, master, localMatches, clientTs, endDate } };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -230,12 +231,14 @@ async function getLeaderboard(url, env, now) {
   const t = now();
 
   const season = await env.DB.prepare('SELECT end_date FROM season WHERE season_id = ?').bind(seasonId).first();
-  const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ?').bind(seasonId).first();
+  const total = await env.DB
+    .prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ? AND master = 1').bind(seasonId).first();
 
   const rows = await env.DB
-    // exp first, then elo: inside Master exp barely moves (one rank spans 550-15000) so elo is
-    // what actually separates the top of the board.
-    .prepare('SELECT * FROM standing WHERE season_id = ? ORDER BY exp DESC, elo DESC, season_matches DESC, last_seen ASC LIMIT ?')
+    // Master only, by ELO. Everyone below Master is still recorded - their history is kept and
+    // they appear the moment they get there - but exp is what separates them and this is an ELO
+    // board, so they are not ranked on it.
+    .prepare('SELECT * FROM standing WHERE season_id = ? AND master = 1 ORDER BY elo DESC, season_matches DESC, last_seen ASC LIMIT ?')
     .bind(seasonId, limit).all();
 
   const players = (rows.results || []).map((r, i) => publicRow(r, i + 1, t));
@@ -244,7 +247,8 @@ async function getLeaderboard(url, env, now) {
   if (me && ID_RE.test(me)) {
     const r = await env.DB.prepare('SELECT * FROM standing WHERE season_id = ? AND player_id = ?')
       .bind(seasonId, me).first();
-    if (r) mine = publicRow(r, await rankOf(env, seasonId, Number(r.exp), Number(r.season_matches)), t);
+    if (r) mine = publicRow(r, await rankOf(env, seasonId, Number(r.elo || 0),
+                                            Number(r.season_matches), Number(r.master || 0)), t);
   }
 
   const endDate = season ? season.end_date : null;
@@ -269,7 +273,8 @@ async function getPlayer(id, url, env, now) {
   if (!r) return json({ standing: null, snapshots: [] });
 
   const t = now();
-  const standing = publicRow(r, await rankOf(env, seasonId, Number(r.exp), Number(r.season_matches)), t);
+  const standing = publicRow(r, await rankOf(env, seasonId, Number(r.elo || 0),
+                                             Number(r.season_matches), Number(r.master || 0)), t);
   const snaps = await env.DB
     .prepare('SELECT exp, wins, losses, season_matches, elo, received_ts, flags FROM snapshot ' +
              'WHERE player_id = ? AND season_id = ? ORDER BY received_ts DESC, id DESC LIMIT 50')
@@ -305,10 +310,12 @@ async function resolveSeason(url, env) {
 }
 
 /** 1-based rank: how many standings sort strictly ahead, plus one. Same order as the board. */
-async function rankOf(env, seasonId, exp, matches) {
+async function rankOf(env, seasonId, elo, matches, master) {
+  if (!master) return 0;   // unranked: below Master
   const r = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ? AND (exp > ? OR (exp = ? AND season_matches > ?))')
-    .bind(seasonId, exp, exp, matches).first();
+    .prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ? AND master = 1 ' +
+             'AND (elo > ? OR (elo = ? AND season_matches > ?))')
+    .bind(seasonId, elo, elo, matches).first();
   return (r ? Number(r.n) : 0) + 1;
 }
 
@@ -333,6 +340,7 @@ function publicRow(r, rank, t) {
     seasonMatches: Number(r.season_matches),
     consecutiveWins: Number(r.consecutive_wins),
     elo: Number(r.elo || 0),
+    master: Number(r.master || 0) === 1,
     snapshots: Number(r.snapshots),
     firstSeen: Number(r.first_seen),
     lastSeen: Number(r.last_seen),

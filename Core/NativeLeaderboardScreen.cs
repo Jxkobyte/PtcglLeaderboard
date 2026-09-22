@@ -107,7 +107,7 @@ namespace PrizeTracker.Core
             Col(head.transform, "#", 30, 70, TextAlignmentOptions.MidlineLeft);
             Col(head.transform, "PLAYER", 215, 600, TextAlignmentOptions.MidlineLeft);
             Col(head.transform, "LEAGUE", 820, 300, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "RATING", 1150, 200, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "ELO", 1150, 200, TextAlignmentOptions.MidlineRight);
             Col(head.transform, "RECORD", 1390, 220, TextAlignmentOptions.MidlineRight);
             Col(head.transform, "WIN %", 1630, 130, TextAlignmentOptions.MidlineRight);
 
@@ -157,7 +157,7 @@ namespace PrizeTracker.Core
                     ? "No leaderboard server is configured."
                     : (Board.Busy ? "Loading..."
                        : !string.IsNullOrEmpty(Board.LastError) ? "Could not reach the leaderboard.\n" + Board.LastError
-                       : "No one is on the board for this season yet.");
+                       : "No one has reached Master this season yet.");
                 UpdateStatus();
                 return;
             }
@@ -217,13 +217,10 @@ namespace PrizeTracker.Core
                                        TextAlignmentOptions.MidlineLeft);
             NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 820, 0, 300, 44);
 
-            // ONE rating column, because the two numbers are consecutive halves of the same climb
-            // rather than rivals. Exp separates players up to Master and then stops: the season
-            // config gives Master a single rank, arceus_league_rank1_arceus, spanning 550 all the
-            // way to 15000, so inside it exp says almost nothing and ELO is what still moves.
-            // Show whichever one is doing the work; the league beside it says which that is.
-            var rating = GameArt.Label("Text_Medium", row, RatingText(p), 32, Ink,
-                                       TextAlignmentOptions.MidlineRight);
+            // ELO alone. Everyone on this board is in Master, where exp has stopped separating
+            // players - one rank spans 550 to 15000 - so it is the only number left that ranks.
+            var rating = GameArt.Label("Text_Medium", row, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
+                                       32, Ink, TextAlignmentOptions.MidlineRight);
             NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, 1150, 0, 200, 44);
 
             // "120-60": 120 wins, 60 losses - the matches played, as a record.
@@ -295,25 +292,6 @@ namespace PrizeTracker.Core
             }
         }
 
-        /// <summary>
-        /// ELO once a player is in Master, exp before it. A Master player who has not reported an
-        /// ELO yet falls back to exp rather than showing a dash.
-        /// </summary>
-        private string RatingText(BoardRow p)
-        {
-            if (IsMaster(p.Exp) && p.Elo > 0) return p.Elo.ToString("N0");
-            return p.Exp.ToString("N0");
-        }
-
-        private bool IsMaster(int exp)
-        {
-            Season.League league; Season.Rank rank; int idx;
-            if (Season == null || !Season.RankFor((uint)Math.Max(0, exp), out league, out rank, out idx))
-                return false;
-            return league != null && league.Name != null &&
-                   league.Name.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private string LeagueTitle(int exp)
         {
             Season.League league; Season.Rank rank; int idx;
@@ -344,16 +322,19 @@ namespace PrizeTracker.Core
             if (st != null)
             {
                 var age = st.FetchedUtc == default(DateTime) ? "" : Ago(now - st.FetchedUtc);
-                _foot.text = "Ranked by exp - the game's own season rank   ·   " + st.Total +
+                _foot.text = "Master league, ranked by ELO   ·   " + st.Total +
                              (st.Total == 1 ? " player" : " players") +
                              (age.Length > 0 ? "   ·   updated " + age : "");
             }
-            else _foot.text = "Ranked by exp - the game's own season rank";
+            else _foot.text = "Master league, ranked by ELO";
 
             if (Board == null) { _status.text = ""; return; }
             if (!Board.Enabled) _status.text = "Not sharing your record - turn on Community Leaderboard in Settings";
             else if (string.IsNullOrEmpty(Board.EffectiveName)) _status.text = "Sharing as your in-game name once a match has been played";
             else if (!string.IsNullOrEmpty(Board.LastError)) _status.text = Board.LastError;
+            else if (st != null && st.Me != null && !st.Me.Master)
+                _status.text = "Sharing as " + Board.EffectiveName + "   ·   " +
+                               LeagueTitle(st.Me.Exp) + " - the board ranks Master only";
             else _status.text = "Sharing as " + Board.EffectiveName +
                                 (string.IsNullOrEmpty(Board.LastSubmit) ? "" : "   ·   last submit: " + Board.LastSubmit);
         }

@@ -18,6 +18,7 @@ namespace PrizeTracker.Core
         public string PlayerId = "";
         public string DisplayName = "";
         public int Exp, Wins, Losses, SeasonMatches, ConsecutiveWins, Snapshots, Elo;
+        public bool Master;
         public long FirstSeen, LastSeen;
         public List<string> Flags = new List<string>();
 
@@ -207,6 +208,9 @@ namespace PrizeTracker.Core
                 ["seasonMatches"] = matches,
                 ["consecutiveWins"] = streak,
                 ["elo"] = ReadElo(),
+                // Only the client has the season config that says where Master begins, so the
+                // client decides. The service just stores the answer and ranks on it.
+                ["master"] = Season != null && Season.IsMaster(exp),
                 ["localMatches"] = LocalMatchesThisSeason(),
                 ["clientTs"] = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds,
             };
@@ -337,6 +341,7 @@ namespace PrizeTracker.Core
                 SeasonMatches = p.Value<int?>("seasonMatches") ?? 0,
                 ConsecutiveWins = p.Value<int?>("consecutiveWins") ?? 0,
                 Elo = p.Value<int?>("elo") ?? 0,
+                Master = p.Value<bool?>("master") ?? false,
                 Snapshots = p.Value<int?>("snapshots") ?? 0,
                 FirstSeen = p.Value<long?>("firstSeen") ?? 0,
                 LastSeen = p.Value<long?>("lastSeen") ?? 0,

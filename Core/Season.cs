@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -165,6 +165,22 @@ namespace PrizeTracker.Core
                 }
             }
             return rank != null;
+        }
+
+        /// <summary>
+        /// Is this exp inside Master (Arceus)?
+        ///
+        /// Master is a single rank in the config - arceus_league_rank1_arceus - spanning 550 all
+        /// the way to 15000, which is why exp stops separating players once they arrive and ELO
+        /// is what still moves. Matched on the league name rather than a hardcoded threshold, so
+        /// a season that moves the boundary is followed automatically.
+        /// </summary>
+        public bool IsMaster(uint exp)
+        {
+            League league; Rank rank; int idx;
+            if (!RankFor(exp, out league, out rank, out idx)) return false;
+            return league != null && league.Name != null &&
+                   league.Name.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>"43 days" / "6 hours" / "ended" - for the header.</summary>

@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS standing (
   season_matches   INTEGER NOT NULL,
   consecutive_wins INTEGER NOT NULL DEFAULT 0,
   elo              INTEGER NOT NULL DEFAULT 0,
+  -- Master (Arceus) league, decided by the CLIENT: only it has the season config that says where
+  -- Master begins. Below Master players are recorded but never ranked - exp separates them, and
+  -- this board is an ELO board.
+  master           INTEGER NOT NULL DEFAULT 0,
   snapshots        INTEGER NOT NULL,
   first_seen       INTEGER NOT NULL,
   last_seen        INTEGER NOT NULL,
