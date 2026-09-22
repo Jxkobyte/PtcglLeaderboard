@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -87,6 +87,18 @@ namespace PrizeTracker.Core
             var deadline = Time.unscaledTime + 30f;
             string signature = null;
             int savedOppArea = 0, savedMeArea = 0;
+            float oppSettleUntil = 0f, meSettleUntil = 0f;
+
+            // How long to keep re-reading a target after it first appears.
+            //
+            // The posed avatars ANIMATE in, so the first frame of a full-size target catches the
+            // character mid-move - arms out, halfway through a gesture. Re-reading for a few
+            // seconds and letting the last read win lands on the settled pose instead.
+            //
+            // Bounded deliberately rather than running to the 30s deadline: a RenderTexture is a
+            // live surface, and once the results screen closes it is recycled, so a late read
+            // captures whatever replaced it. That mistake already produced a blank once.
+            const float SettleSeconds = 5f;
 
             while (Time.unscaledTime < deadline)
             {
@@ -128,18 +140,34 @@ namespace PrizeTracker.Core
                     if (rt == null) continue;
                     int area = rt.width * rt.height;
 
-                    if (rt.name == OppTexture && area > savedOppArea)
+                    // A bigger target always wins; the same size keeps winning for a few seconds
+                    // so the pose can settle. ">=" is what allows the re-read at all.
+                    bool bigger = area > savedOppArea;
+                    if (rt.name == OppTexture &&
+                        (bigger || (area >= savedOppArea && Time.unscaledTime < oppSettleUntil)))
                     {
                         if (Save(Key(match, "opp"), rt))
                         {
+                            if (bigger)
+                            {
+                                oppSettleUntil = Time.unscaledTime + SettleSeconds;
+                                Plugin.Log.LogWarning("avatar capture: opponent " + rt.width + "x" + rt.height +
+                                                      " from " + c.Path + " (re-reading for " +
+                                                      SettleSeconds + "s so the pose settles)");
+                            }
                             savedOppArea = area;
-                            Plugin.Log.LogWarning("avatar capture: opponent " + rt.width + "x" + rt.height +
-                                                  " from " + c.Path);
                         }
                     }
-                    else if (rt.name == MeTexture && area > savedMeArea)
+                    else if (rt.name == MeTexture &&
+                             (area > savedMeArea ||
+                              (area >= savedMeArea && Time.unscaledTime < meSettleUntil)))
                     {
-                        if (Save(Key(match, "me"), rt)) savedMeArea = area;
+                        bool meBigger = area > savedMeArea;
+                        if (Save(Key(match, "me"), rt))
+                        {
+                            if (meBigger) meSettleUntil = Time.unscaledTime + SettleSeconds;
+                            savedMeArea = area;
+                        }
                     }
                 }
             }

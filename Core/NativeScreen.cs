@@ -354,7 +354,10 @@ namespace PrizeTracker.Core
             const float logRight = rowRight;                   // 1910..2080
             const float deckRight = logRight - logW - btnGap;   // 1702..1892
             const float addRight = deckRight - deckW - btnGap;  // 1474..1684
-            const float whenRight = addRight - 24f;             // 1260..1450
+            // addRight is the button's RIGHT edge, so its left edge is addRight - addW. Measuring
+            // the gap from the right edge put the timestamp inside the button, which is why it
+            // disappeared entirely rather than merely overlapping.
+            const float whenRight = addRight - addW - 24f;      // 1260..1450
             const float oppW = whenRight - 190f - 896f - 20f;   // opponent block, clear of the time
 
             var oppName = GameArt.Label("Text_Medium", row,
@@ -408,7 +411,39 @@ namespace PrizeTracker.Core
                 catch (Exception e) { Plugin.Log.LogWarning("copy failed: " + e.Message); }
             });
 
+            if (!_loggedRow)
+            {
+                _loggedRow = true;
+                DumpLabel("head", head);
+                DumpLabel("meta", meta);
+                DumpLabel("oppName", oppName);
+                DumpLabel("oppDeck", oppDeck);
+                DumpLabel("when", when);
+            }
+
             y += RowH + RowGap;
+        }
+
+        private static bool _loggedRow;
+
+        /// <summary>
+        /// What a row label actually IS, once. Three separate rounds have now been spent guessing
+        /// why a label is not on screen - font, material, position - when the object itself can
+        /// simply be asked.
+        /// </summary>
+        private static void DumpLabel(string name, TextMeshProUGUI l)
+        {
+            if (l == null) { Plugin.Log.LogWarning("row label " + name + ": NULL"); return; }
+            var rt = l.rectTransform;
+            Plugin.Log.LogWarning("row label " + name + ": \"" + (l.text ?? "") + "\"" +
+                " active=" + l.gameObject.activeInHierarchy + " enabled=" + l.enabled +
+                " color=" + l.color + " size=" + l.fontSize +
+                " font=" + (l.font != null ? l.font.name : "null") +
+                " mat=" + (l.fontSharedMaterial != null ? l.fontSharedMaterial.name : "null") +
+                " pos=" + rt.anchoredPosition + " rect=" + rt.rect.size +
+                " scale=" + rt.localScale + " alpha=" + l.alpha +
+                " crAlpha=" + (l.canvasRenderer != null ? l.canvasRenderer.GetAlpha().ToString("0.00") : "?") +
+                " cg=" + (l.GetComponent<CanvasGroup>() != null));
         }
 
         /// <summary>
@@ -480,7 +515,12 @@ namespace PrizeTracker.Core
                 holder.AddComponent<Mask>().showMaskGraphic = false;
             }
 
-            var rect = uv ?? (!isAvatar && !isItem ? CardUv : FullUv);
+            // Sleeves follow the CARD convention, measured not assumed: the sleeve texture is
+            // 256x256 with its content in the middle 184px (alpha bbox x 36..220), and
+            // 184/256 = 0.719 - a card - with 36/256 = 0.14 of transparent padding each side.
+            // That is the same 0.14/0.72 crop card art uses, so drawing sleeves whole stretched
+            // them vertically into the card-shaped slot.
+            var rect = uv ?? (isAvatar ? FullUv : CardUv);
             if (tex != null) AttachTexture(hrt, tex, rect, preserveRatio: isAvatar);
             else _pendingArt.Add(new PendingArt { Key = key, Holder = hrt, Uv = rect, IsItem = isItem });
 
@@ -910,6 +950,12 @@ namespace PrizeTracker.Core
             foreach (var l in Resources.FindObjectsOfTypeAll<TextMeshProUGUI>())
             {
                 if (l == null || l.font == null || l.canvas == null) continue;
+                // Prefer a sample that is switched ON and on screen. A clone copies the source's
+                // enabled state, so cloning a disabled label yields one that renders nothing while
+                // every property reads correct. The clone forces enabled anyway, but starting from
+                // a live label also gets a material and case style that are actually in use.
+                if (!l.enabled || !l.gameObject.activeInHierarchy) continue;
+                if (l.canvasRenderer != null && l.canvasRenderer.GetAlpha() < 0.99f) continue;
                 if (any == null) any = l;
                 if (l.font.name != fontName) continue;
                 _fontSamples[fontName] = l;
@@ -951,6 +997,21 @@ namespace PrizeTracker.Core
             // vanished while Text_Bold and Text_Regular were fine: the sample happened to sit
             // inside a masked region.
             if (lbl.font != null) lbl.fontSharedMaterial = lbl.font.material;
+
+            // Undo everything the SOURCE happened to be wearing.
+            //
+            // The sample is whatever label with this font was found, and it may be switched off,
+            // faded out, or inside a CanvasGroup that is. A clone inherits all of it, and the
+            // result renders nothing while text, colour, material, TMP alpha and position all read
+            // perfectly correct - which is how first "WIN"/"LOSS" and then the grey second line
+            // vanished in turn, depending on which sample got picked that session.
+            //
+            // CanvasRenderer alpha is the one that does not show up in any TMP property: a label
+            // in a faded panel carries alpha 0 on its renderer. CanvasGroup is missed by the
+            // component strip below because it is not a MonoBehaviour.
+            lbl.enabled = true;
+            foreach (var cg in go.GetComponents<CanvasGroup>()) UnityEngine.Object.Destroy(cg);
+            if (lbl.canvasRenderer != null) lbl.canvasRenderer.SetAlpha(1f);
 
             lbl.text = text;
             lbl.fontSize = size;
