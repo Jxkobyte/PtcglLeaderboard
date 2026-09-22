@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -20,7 +20,9 @@ namespace PrizeTracker.Core
         public int MyPrizesLeft;
         public int OppPrizesLeft;
         public int Turns;
-        public string DeckBox = "";   // the deck's box art id, for the row thumbnail
+        public string DeckBox = "";    // deck box art id (a 3D UV unwrap - see CoverCard)
+        public string CoverCard = "";  // a card that stands for the deck, for the row thumbnail
+        public string Sleeve = "";     // the deck's card sleeve - what the client's own deck tile shows
         public string Log = "";       // the client's own battle log text, when captured
 
         /// <summary>
@@ -123,6 +125,8 @@ namespace PrizeTracker.Core
             Num(sb, "oppPrizesLeft", OppPrizesLeft); sb.Append(',');
             Num(sb, "turns", Turns); sb.Append(',');
             Str(sb, "deckBox", DeckBox); sb.Append(',');
+            Str(sb, "cover", CoverCard); sb.Append(',');
+            Str(sb, "sleeve", Sleeve); sb.Append(',');
             Str(sb, "oppCards", OppCards); sb.Append(',');
             Str(sb, "oppNames", OppNames); sb.Append(',');
             Str(sb, "oppTypes", OppTypes); sb.Append(',');
@@ -178,6 +182,8 @@ namespace PrizeTracker.Core
             r.OppPrizesLeft = Int(f, "oppPrizesLeft");
             r.Turns = Int(f, "turns");
             r.DeckBox = Get(f, "deckBox");
+            r.CoverCard = Get(f, "cover");
+            r.Sleeve = Get(f, "sleeve");
             r.Log = Get(f, "log");
             r.OppCards = Get(f, "oppCards");
             r.OppNames = Get(f, "oppNames");

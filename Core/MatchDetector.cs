@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Logging;
@@ -68,6 +68,7 @@ namespace PrizeTracker.Core
                 _nextDeckRetry = 0f;
                 _matchStart = DateTime.UtcNow;
                 _recorded = false;
+                _matchDeck = null;
                 _log.LogInfo("Match started - tracking.");
             }
             else if (!inMatch && _inMatch)
@@ -125,7 +126,9 @@ namespace PrizeTracker.Core
                 MyPrizesLeft = _tracker.MyPrizes,
                 OppPrizesLeft = _tracker.OppPrizes,
                 Turns = _lastTurn,
-                DeckBox = Game.ActiveDeckBox(),
+                DeckBox = _matchDeck != null ? (_matchDeck.deckBox ?? "") : Game.ActiveDeckBox(),
+                CoverCard = Game.CoverCardOf(_matchDeck) ?? Game.ActiveDeckCoverCard(),
+                Sleeve = Nz(Game.SleeveOf(_matchDeck), Game.ActiveDeckSleeve()),
                 OppCards = OppCardsSeen(),
                 OppNames = OppNamesSeen(),
                 OppTypes = OppTypesSeen(),
@@ -150,6 +153,7 @@ namespace PrizeTracker.Core
 
         private int _lastTurn;
         private int _censusLogs;
+        private SharedSDKUtils.DeckInfo _matchDeck;
 
         /// <summary>
         /// While a picker is open, report where the client is keeping IDENTIFIED cards.
@@ -266,7 +270,13 @@ namespace PrizeTracker.Core
         public bool TryLoadDeck(bool verbose)
         {
             string name;
-            var cards = Game.ActiveDeck(out name);
+            SharedSDKUtils.DeckInfo matchDeck;
+
+            // The deck the MATCH dealt beats the deck the inventory calls active - see
+            // Game.MatchDeck. Falls back to the inventory when the match has not told us yet.
+            var cards = Game.MatchDeck(Game.Info(), out name, out matchDeck);
+            if (cards != null) _matchDeck = matchDeck;
+            if (cards == null) cards = Game.ActiveDeck(out name);
             if (cards == null || cards.Count == 0)
             {
                 if (verbose) _log.LogWarning("Could not read an active deck for the current game mode.");
@@ -339,6 +349,12 @@ namespace PrizeTracker.Core
                 for (int i = 0; i < count; i++) deck.Add(name);
             }
             return deck;
+        }
+
+        /// <summary>First non-empty of the two - the match deck if we have it, else the active one.</summary>
+        private static string Nz(string a, string b)
+        {
+            return string.IsNullOrEmpty(a) ? (b ?? "") : a;
         }
     }
 }

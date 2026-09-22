@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using HarmonyLib;
 using TMPro;
@@ -85,7 +85,9 @@ namespace PrizeTracker.Core
                     return;
                 }
 
-                label.text = w.Wins + "-" + w.Losses + "  " + Mathf.RoundToInt((float)(w.Rate * 100f)) + "%";
+                // Record only. The percentage was redundant beside it and made the badge read as
+                // a statistic rather than as part of the tile.
+                label.text = w.Wins + "-" + w.Losses;
                 label.color = w.Rate >= 0.55 ? new Color(0.40f, 0.85f, 0.55f)
                             : w.Rate < 0.45 ? new Color(1.00f, 0.55f, 0.45f)
                             : new Color(0.92f, 0.93f, 0.96f);

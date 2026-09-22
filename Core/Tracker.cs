@@ -147,6 +147,7 @@ namespace PrizeTracker.Core
             _solvedPrizes = null;
             MinDeckUnknown = int.MaxValue;
             _searchLogs = 0;
+            _solveLogs = 0;
             _lastPrizeCount = -1;
             _lastVisible = null;
             Prizes.Clear(); DeckRows.Clear();
@@ -181,6 +182,7 @@ namespace PrizeTracker.Core
         // Prizes only ever leave the prize zone, so the latched set is only ever reduced.
         private Dictionary<string, int> _solvedPrizes;
         private int _searchLogs;
+        private int _solveLogs;
 
         /// <summary>
         /// Optional diagnostic sink, supplied by the plugin.
@@ -360,6 +362,21 @@ namespace PrizeTracker.Core
             }
 
             int unaccountedTotal = unaccounted.Values.Sum();
+
+            // The solve turns on four numbers and nothing else. When the deck is fully identified
+            // and prizes still are not solved, printing them says which one is wrong instead of
+            // leaving "0 of 6 known" as the only visible symptom.
+            if (DeckUnknown == 0 && _solvedPrizes == null && Diagnostic != null && _solveLogs < 4)
+            {
+                _solveLogs++;
+                Diagnostic(string.Format(
+                    "solve check: deckUnknown={0} unaccounted={1} totalUnknown={2} prizeUnknown={3}" +
+                    " -> {4}",
+                    DeckUnknown, unaccountedTotal, TotalUnknown, PrizeUnknown,
+                    unaccountedTotal != TotalUnknown ? "BLOCKED by the decklist sanity gate"
+                    : unaccountedTotal != PrizeUnknown ? "unaccounted does not equal the prize count"
+                    : "should solve"));
+            }
 
             // Sanity gate: the unaccounted multiset should exactly fill the hidden slots. A
             // mismatch means the list we loaded is not the one being played (deck switched, or a

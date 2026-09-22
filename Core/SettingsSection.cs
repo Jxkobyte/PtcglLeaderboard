@@ -29,10 +29,8 @@ namespace PrizeTracker.Core
         private bool _logged;
         private bool _failed;
 
-        private TextMeshProUGUI _fpsValue, _unfocusedValue, _overlayValue, _badgeValue;
+        private TextMeshProUGUI _fpsValue, _unfocusedValue, _badgeValue;
 
-        /// <summary>The in-match overlay, so its visibility can be toggled from here too.</summary>
-        public Overlay Ov;
         private Transform _dumpRoot;
 
         private void Update()
@@ -274,8 +272,6 @@ namespace PrizeTracker.Core
                                () => Step(-1), () => Step(+1));
             _unfocusedValue = AddRow(panel, template, "WHEN NOT FOCUSED", ref y,
                                () => StepUnfocused(-1), () => StepUnfocused(+1));
-            _overlayValue = AddToggle(panel, template, "IN-MATCH OVERLAY", ref y,
-                               () => { if (Ov != null) Ov.Visible = !Ov.Visible; });
             _badgeValue = AddToggle(panel, template, "DECK WIN RATES", ref y,
                                () => DeckBadge.Enabled = !DeckBadge.Enabled);
 
@@ -441,7 +437,6 @@ namespace PrizeTracker.Core
                 if (_unfocusedValue != null)
                     _unfocusedValue.text = Perf.UnfocusedFps <= 0 ? "UNCAPPED" : Perf.UnfocusedFps.ToString();
             }
-            SetToggle(_overlayValue, Ov != null && Ov.Visible);
             SetToggle(_badgeValue, DeckBadge.Enabled);
         }
 

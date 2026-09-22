@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -30,7 +30,8 @@ namespace PrizeTracker
         private readonly Harmony _harmony = new Harmony(ID);
 
         private GameObject _host;
-        private Overlay _overlay;
+        private PrizeViewProbe _prizeProbe;
+        private PrizeReveal _reveal;
         private Tracker _tracker;
         private MatchDetector _detector;
         private PerformanceTuner _perf;
@@ -41,7 +42,6 @@ namespace PrizeTracker
         private ConfigEntry<bool> _cfgFpsEnabled;
         private ConfigEntry<int> _cfgMatchFps, _cfgMenuFps, _cfgUnfocusedFps;
         private ConfigEntry<float> _cfgX, _cfgY, _cfgW, _cfgH;
-        private ConfigEntry<bool> _cfgVisible;
         private ConfigEntry<bool> _cfgDeckBadge;
 
         private void Awake()
@@ -92,6 +92,9 @@ namespace PrizeTracker
             catch (Exception e) { Log.LogWarning("deck screen patch failed: " + e.Message); }
             Log.LogInfo("Match history: " + _history.Count + " recorded (" + historyPath + ")");
             _host.AddComponent<CardArt>();   // serves card textures to the overlay
+            _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
+            _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
+            _host.AddComponent<CardAspectProbe>(); // what shape does the CLIENT draw a card texture at
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
 
@@ -108,28 +111,20 @@ namespace PrizeTracker
             _settings.Perf = _perf;
             _settings.OnChanged = SaveSettings;
 
-            _overlay = new Overlay();
-            _overlay.Tracker = _tracker;
-            _overlay.Perf = _perf;
-            _overlay.History = _history;
-            _overlay.Visible = _cfgVisible.Value;
-            _overlay.WindowRect = new Rect(_cfgX.Value, _cfgY.Value, _cfgW.Value, _cfgH.Value);
-            _overlay.OnSettingsChanged = SaveSettings;
+            _prizeProbe = _host.AddComponent<PrizeViewProbe>();
+            _reveal = _host.AddComponent<PrizeReveal>();
+            _reveal.Tracker = _tracker;
 
-            // AFTER _overlay exists, for the same reason _settings.Perf is wired after _perf:
-            // assigning it earlier stores a null and the toggle silently does nothing.
-            _settings.Ov = _overlay;
 
             _detector = _host.AddComponent<MatchDetector>();
             _detector.History = _history;
             _detector.Initialize(Log, _tracker);
 
-            Log.LogWarning(NAME + " v" + VERSION + " loaded. F1 overlay, F3 reload deck, F4 clipboard deck.");
+            Log.LogWarning(NAME + " v" + VERSION + " loaded. F3 reload deck, F4 clipboard deck, F6 hot reload, F8 dump UI.");
         }
 
         private void BindConfig()
         {
-            _cfgVisible = Config.Bind("Overlay", "Visible", true, "Show the overlay on startup.");
             _cfgX = Config.Bind("Overlay", "X", 40f, "Overlay position X.");
             _cfgY = Config.Bind("Overlay", "Y", 120f, "Overlay position Y.");
             _cfgW = Config.Bind("Overlay", "Width", 340f, "Overlay width.");
@@ -150,12 +145,7 @@ namespace PrizeTracker
 
         private void SaveSettings()
         {
-            if (_overlay == null || _perf == null) return;
-            _cfgVisible.Value = _overlay.Visible;
-            _cfgX.Value = _overlay.WindowRect.x;
-            _cfgY.Value = _overlay.WindowRect.y;
-            _cfgW.Value = _overlay.WindowRect.width;
-            _cfgH.Value = _overlay.WindowRect.height;
+            if (_perf == null) return;
 
             _cfgDeckBadge.Value = DeckBadge.Enabled;
             _cfgFpsEnabled.Value = _perf.Enabled;
@@ -167,16 +157,14 @@ namespace PrizeTracker
 
         private void Update()
         {
-            if (_overlay == null) return;
 
-            if (Input.GetKeyDown(KeyCode.F1))
-            {
-                _overlay.ToggleRequested();
-                SaveSettings();
-            }
+            Tuning.Poll();
 
-            // Keep the overlay in step with whether a match is actually running.
-            _overlay.InMatch = Game.InMatch();
+            // The prize display lives inside the client's own prize drawer, so there is nothing
+            // to show, hide or toggle - it appears exactly when you open your prizes.
+            bool inMatch = Game.InMatch();
+            if (_prizeProbe != null) _prizeProbe.InMatch = inMatch;
+            if (_reveal != null) _reveal.InMatch = inMatch;
 
             if (_detector == null) return;
 
@@ -186,21 +174,55 @@ namespace PrizeTracker
             if (Input.GetKeyDown(KeyCode.F4))
                 _detector.TryLoadDeckFromClipboard();
 
-            // F6 dumps whatever UI is on screen, for working out how a screen is built without
+            // F8 dumps whatever UI is on screen, for working out how a screen is built without
             // guessing and restarting the game each time.
-            if (Input.GetKeyDown(KeyCode.F6) && _settings != null)
+            //
+            // NOT F6: that is ScriptEngine's reload key, so pressing it would dump the UI from the
+            // instance being torn down at the same moment a new one is loading - noise in the log
+            // at exactly the point the log matters most.
+            if (Input.GetKeyDown(KeyCode.F8) && _settings != null)
                 _settings.DumpNow();
         }
 
-        private void OnGUI()
-        {
-            if (_overlay != null) _overlay.OnGUI();
-        }
-
+        /// <summary>
+        /// Leave the client exactly as we found it.
+        ///
+        /// This matters for hot reloading: everything below is injected INTO the client's own
+        /// hierarchy and survives the plugin being unloaded. Without cleanup a reload leaves the
+        /// old nav tab, screen and settings card in place and adds a second set - and re-applies
+        /// the Harmony patch on top of the existing one, so DeckSelectEntry.Setup runs our postfix
+        /// twice. It is also simply correct: a plugin that unloads should not leave litter.
+        /// </summary>
         private void OnDestroy()
         {
             SaveSettings();
+
+            try { _harmony.UnpatchSelf(); }
+            catch (Exception e) { Log.LogWarning("unpatch failed: " + e.Message); }
+
+            foreach (var name in new[]
+            {
+                "PrizeTrackerHistoryTab",          // clone in the client's top bar
+                "PrizeTrackerMatchHistoryScreen",  // screen under InactiveScreens
+                "PrizeTrackerSettings",            // card in the client's Settings screen
+                "PrizeTrackerHistoryCanvas",       // fallback overlay canvas
+                "PrizeTrackerSlotArt",             // art painted into prize slots (old approach)
+            })
+            {
+                try { DestroyAllNamed(name); } catch { }
+            }
+
             if (_host != null) Destroy(_host);
+        }
+
+        private static void DestroyAllNamed(string name)
+        {
+            foreach (var t in Resources.FindObjectsOfTypeAll<Transform>())
+            {
+                if (t == null || t.name != name) continue;
+                if (!t.gameObject.scene.IsValid()) continue;   // never touch prefabs
+                DestroyImmediate(t.gameObject);
+            }
         }
     }
 }

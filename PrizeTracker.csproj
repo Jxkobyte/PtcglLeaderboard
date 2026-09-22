@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     PTCGL Prize Tracker - a standalone BepInEx overlay.
@@ -23,6 +23,13 @@
     <GameManaged Condition="'$(GameManaged)' == ''">$(GameRoot)\Pokemon TCG Live_Data\Managed</GameManaged>
     <BepInExCore Condition="'$(BepInExCore)' == ''">$(GameRoot)\BepInEx\core</BepInExCore>
     <BepInExPlugins Condition="'$(BepInExPlugins)' == ''">$(GameRoot)\BepInEx\plugins</BepInExPlugins>
+    <!--
+      Builds deploy to BepInEx\scripts, not plugins. ScriptEngine (BepInEx.Debug) watches that
+      folder and reloads everything in it on F6, so a change costs a build and a keypress instead
+      of closing the game, building, relaunching and playing back to wherever the thing is visible.
+      ScriptEngine itself lives in plugins and is loaded once at startup.
+    -->
+    <BepInExScripts Condition="'$(BepInExScripts)' == ''">$(GameRoot)\BepInEx\scripts</BepInExScripts>
   </PropertyGroup>
 
   <ItemGroup>
@@ -70,15 +77,22 @@
     -->
   </ItemGroup>
 
-  <Target Name="DeployToPlugins" AfterTargets="Build" Condition="Exists('$(BepInExPlugins)')">
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExPlugins)"
+  <Target Name="DeployToScripts" AfterTargets="Build" Condition="Exists('$(BepInExScripts)')">
+    <!--
+      The .pdb goes too, and is NOT optional. ScriptEngine reads the assembly WITH SYMBOLS, so a
+      DLL with no .pdb beside it throws SymbolsNotFoundException out of Mono.Cecil and the plugin
+      silently never loads. Silently, because BepInEx's [Logging.Disk] has WriteUnityLog = false:
+      the exception is raised on the Unity side and only ever appears in Unity's own Player.log,
+      while LogOutput.log just stops after "Loading plugins from ...".
+    -->
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)$(TargetName).pdb" DestinationFolder="$(BepInExScripts)"
           Retries="0" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="CopiedFiles" ItemName="_DeployedPlugin" />
     </Copy>
     <Message Importance="high" Condition="'@(_DeployedPlugin)' == ''"
-             Text="PLUGIN NOT DEPLOYED: close Pokemon TCG Live (it has the old DLL locked) and build again." />
+             Text="PLUGIN NOT DEPLOYED: the DLL is locked. Press F6 in game once (ScriptEngine reloads from a copy, freeing it) or close the game, then build again." />
     <Message Importance="high" Condition="'@(_DeployedPlugin)' != ''"
-             Text="Plugin deployed to $(BepInExPlugins)" />
+             Text="Plugin deployed to $(BepInExScripts) - press F6 in game to reload it." />
   </Target>
 
 </Project>

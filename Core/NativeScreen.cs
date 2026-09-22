@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -35,6 +35,7 @@ namespace PrizeTracker.Core
 
         // deck preview
         private GameObject _modal;
+        private RectTransform _panel;
         private Transform _grid;
         private TextMeshProUGUI _modalTitle, _modalSub, _modalNote, _copyDeckLabel;
         private readonly List<GameObject> _tiles = new List<GameObject>();
@@ -54,9 +55,30 @@ namespace PrizeTracker.Core
             public RectTransform Holder;
             public GameObject Fallback;
             public Rect Uv = FullUv;
+            public bool IsItem;       // a sleeve/box/coin, loaded by ItemArt rather than CardArt
         }
 
         private static readonly Rect FullUv = new Rect(0, 0, 1, 1);
+
+        /// <summary>
+        /// The card within its square texture, taken from the CLIENT rather than worked out.
+        ///
+        /// Card textures are square (256x256 thumbnails, 1024x1024 full) and the card does not
+        /// fill them: there is padding either side. The client's own card images read
+        ///
+        ///     rect 286x400  aspect 0.716  uv (x:0.14, y:0.00, w:0.72, h:1.00)  tex 256x256
+        ///
+        /// on every one sampled, at two different sizes - the middle 72% of the width at full
+        /// height, drawn into a card-shaped rect. 0.72 x 1024 = 737, and 737/1024 = 0.720, which
+        /// is a card.
+        ///
+        /// Both earlier attempts guessed instead of asking: fitting the square whole drew cards as
+        /// squares, and squeezing the whole square into a card frame drew them narrow. The texture
+        /// could not settle it either - it is fully opaque corner to corner, so the padding is not
+        /// visible as padding, and measuring circles in the art kept picking up the card's
+        /// background. The client had the answer available the whole time.
+        /// </summary>
+        private static readonly Rect CardUv = new Rect(0.14f, 0f, 0.72f, 1f);
 
         /// <summary>
         /// The front panel of a deck box within its texture.
@@ -82,10 +104,12 @@ namespace PrizeTracker.Core
                 var p = _pendingArt[i];
                 if (p.Holder == null) { _pendingArt.RemoveAt(i); continue; }
 
-                var tex = CardArt.Instance != null ? CardArt.Instance.Get(p.Key) : null;
+                var tex = p.IsItem
+                    ? (ItemArt.Instance != null ? ItemArt.Instance.Get(p.Key) : null)
+                    : (CardArt.Instance != null ? CardArt.Instance.Get(p.Key) : null);
                 if (tex == null) continue;
 
-                AttachTexture(p.Holder, tex, p.Uv);
+                AttachTexture(p.Holder, tex, p.Uv, preserveRatio: false);
                 if (p.Fallback != null) p.Fallback.SetActive(false);
                 _pendingArt.RemoveAt(i);
             }
@@ -96,7 +120,23 @@ namespace PrizeTracker.Core
             AttachTexture(holder, tex, FullUv);
         }
 
-        private static void AttachTexture(RectTransform holder, Texture tex, Rect uv)
+        /// <summary>
+        /// Draw a texture to fill its holder, or keep its own proportions inside it.
+        ///
+        /// <paramref name="preserveRatio"/> is the whole question, and it is settled by looking at
+        /// a real card texture rather than reasoning about it - two earlier rounds guessed, once
+        /// each way. A card texture is 1024x1024, SQUARE, and the card fills it edge to edge with
+        /// no padding: it is stored horizontally stretched. So drawing it across a card-shaped
+        /// holder is what puts it back to card proportions, and "keep the image's own proportions"
+        /// - which sounds like the careful choice - is precisely what made cards render as squares.
+        ///
+        /// Avatars are the opposite case. They are real photographs at their own shape, so they do
+        /// need fitting, and they get it by asking for it.
+        /// </summary>
+        private static bool _loggedTexShape;
+
+        private static void AttachTexture(RectTransform holder, Texture tex, Rect uv,
+                                          bool preserveRatio = false)
         {
             var go = new GameObject("Tex", typeof(RectTransform));
             go.transform.SetParent(holder, false);
@@ -105,6 +145,23 @@ namespace PrizeTracker.Core
             raw.uvRect = uv;
             raw.raycastTarget = false;
             Stretch((RectTransform)go.transform);
+
+            if (preserveRatio)
+            {
+                float ratio = tex.height > 0 ? (float)tex.width / tex.height : 0.716f;
+                if (uv.width > 0f && uv.height > 0f) ratio *= uv.width / uv.height;
+
+                var fit = go.AddComponent<AspectRatioFitter>();
+                fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+                fit.aspectRatio = ratio;
+            }
+
+            if (!_loggedTexShape)
+            {
+                _loggedTexShape = true;
+                Plugin.Log.LogInfo("card texture shape: " + tex.width + "x" + tex.height +
+                                   "; drawn " + (preserveRatio ? "fitted" : "filling the card frame") + ".");
+            }
             // First, so a backing plate drawn earlier stays behind it.
             go.transform.SetSiblingIndex(holder.childCount > 1 ? 1 : 0);
         }
@@ -218,8 +275,13 @@ namespace PrizeTracker.Core
             // Our deck box, clear of the result bar. At x=38 with a centred pivot it started at
             // x=1 and covered the bar entirely, so the result colour vanished on any row that had
             // deck art - visible as rows 1 and 2 having no coloured edge at all.
-            // Sized to the front panel's own proportions so the crop is not stretched.
-            Art(row, m.DeckBox, 70, 0, 58, 104, false, false, DeckBoxFrontUv);
+            // The deck's own CARD SLEEVE, which is the card-shaped art the client's deck tile
+            // shows and therefore what a player recognises the deck by. Records written before
+            // sleeves were captured fall back to the guessed cover card, so old rows still draw
+            // something rather than going blank.
+            var thumb = !string.IsNullOrEmpty(m.Sleeve) ? m.Sleeve
+                      : !string.IsNullOrEmpty(m.CoverCard) ? m.CoverCard : null;
+            Art(row, thumb, 74, 0, 76, 106, false, isItem: !string.IsNullOrEmpty(m.Sleeve));
 
             var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.MidlineLeft);
             head.richText = true;
@@ -304,7 +366,8 @@ namespace PrizeTracker.Core
         // -----------------------------------------------------------------
         /// <summary>A texture tile: deck box, avatar, or card. Silently absent if art will not load.</summary>
         private RectTransform Art(Transform parent, string key, float x, float y, float w, float h,
-                                  bool rounded, bool isAvatar = false, Rect? uv = null)
+                                  bool rounded, bool isAvatar = false, Rect? uv = null,
+                                  bool isItem = false)
         {
             if (string.IsNullOrEmpty(key)) return null;
 
@@ -312,6 +375,7 @@ namespace PrizeTracker.Core
             // with one would queue a pointless asset-bundle load for a card that cannot exist, and
             // its failure would land in the very diagnostics being used to chase real art problems.
             Texture tex = isAvatar ? Avatars.Get(key)
+                         : isItem  ? (ItemArt.Instance != null ? ItemArt.Instance.Get(key) : null)
                                    : (CardArt.Instance != null ? CardArt.Instance.Get(key) : null);
 
             // An avatar is a file on disk - absent means absent. Card and deck-box art is loaded
@@ -334,9 +398,9 @@ namespace PrizeTracker.Core
                 holder.AddComponent<Mask>().showMaskGraphic = false;
             }
 
-            var rect = uv ?? FullUv;
-            if (tex != null) AttachTexture(hrt, tex, rect);
-            else _pendingArt.Add(new PendingArt { Key = key, Holder = hrt, Uv = rect });
+            var rect = uv ?? (!isAvatar && !isItem ? CardUv : FullUv);
+            if (tex != null) AttachTexture(hrt, tex, rect, preserveRatio: isAvatar);
+            else _pendingArt.Add(new PendingArt { Key = key, Holder = hrt, Uv = rect, IsItem = isItem });
 
             if (rounded)
             {
@@ -390,8 +454,38 @@ namespace PrizeTracker.Core
         // =================================================================
         // Deck preview
         // =================================================================
-        private const int Cols = 8, MaxTiles = 24;
-        private const float CardW = 252f, CardH = 352f, CardGap = 14f;
+        // Geometry measured off the Limitless decklist the user gave as the reference, rather than
+        // chosen by eye: 8 columns, cards at 136x189 (0.7196 wide-to-tall) with an 8px gap on both
+        // axes, and the count badge CENTRED horizontally with its middle 85.2% of the way down the
+        // card at 27.2% x 22.8% of the card's size. Those badge figures are the median of 23 cards
+        // read out of the image, and they varied by under a percent across all of them.
+        //
+        // Absolute sizes here are what fits the client's 2560x1440 design canvas at four rows,
+        // which is the binding constraint - eight columns is comfortable, height is not.
+        private const int Cols = 8, MaxRows = 4, MaxTiles = Cols * MaxRows;
+        private const float CardW = 185f, CardH = 257f, CardGap = 11f;
+        private const float BadgeCx = 0.5f, BadgeCy = 0.852f, BadgeW = 0.272f, BadgeH = 0.228f;
+
+        // Room above the grid for the title and subtitle, and below it for the rule, note and
+        // button. The panel is sized from these plus however many rows the deck actually needs.
+        private const float HeaderH = 168f, FooterH = 150f;
+
+        private static float GridHeight(int rows)
+        {
+            return rows * CardH + (rows - 1) * CardGap;
+        }
+
+        /// <summary>
+        /// Tall enough for exactly the rows this deck needs.
+        ///
+        /// A fixed height was wrong in both directions: three rows of cards overflowed it and ran
+        /// over the footer rule and the copy button, while a small deck left a large empty panel.
+        /// The reference page keeps its cards one size and lets the page grow, so this does too.
+        /// </summary>
+        private static float PanelHeight(int rows)
+        {
+            return HeaderH + GridHeight(rows) + FooterH;
+        }
 
         private void BuildModal(Transform root)
         {
@@ -407,9 +501,10 @@ namespace PrizeTracker.Core
             dismiss.transition = Selectable.Transition.None;
             dismiss.onClick.AddListener(CloseDeck);
 
-            float w = Cols * CardW + (Cols - 1) * CardGap + 96f;   // 1966
+            float w = Cols * CardW + (Cols - 1) * CardGap + 96f;
             var panel = Img("Panel", _modal.transform, GameArt.Sprite("btn_Oct_20"), Color.white);
-            Center(panel, w, 1240, 0, 0);
+            Center(panel, w, PanelHeight(MaxRows), 0, 0);
+            _panel = panel;
             // Clicks inside the panel must not reach the dismiss scrim behind it.
             var block = panel.gameObject.AddComponent<Button>();
             block.targetGraphic = panel.GetComponent<Image>();
@@ -418,11 +513,11 @@ namespace PrizeTracker.Core
 
             _modalTitle = GameArt.Label("Text_Bold", panel.transform, "", 50, Ink,
                                         TextAlignmentOptions.TopLeft);
-            Place(_modalTitle.rectTransform, 0, 1, 0, 1, 48, -44, 1500, 64);
+            Place(_modalTitle.rectTransform, 0, 1, 0, 1, 48, -44, w - 200, 64);
 
             _modalSub = GameArt.Label("Text_Regular", panel.transform, "", 30, InkDim,
                                       TextAlignmentOptions.TopLeft);
-            Place(_modalSub.rectTransform, 0, 1, 0, 1, 48, -108, 1500, 44);
+            Place(_modalSub.rectTransform, 0, 1, 0, 1, 48, -108, w - 200, 44);
 
             var close = Img("Close", panel.transform, GameArt.Sprite("btn_Oct_16"),
                             new Color(0.90f, 0.91f, 0.93f, 1f));
@@ -436,8 +531,8 @@ namespace PrizeTracker.Core
 
             var grid = new GameObject("Grid", typeof(RectTransform));
             grid.transform.SetParent(panel.transform, false);
-            Place((RectTransform)grid.transform, 0.5f, 1, 0.5f, 1, 0, -168,
-                  Cols * CardW + (Cols - 1) * CardGap, 1000);
+            Place((RectTransform)grid.transform, 0.5f, 1, 0.5f, 1, 0, -HeaderH,
+                  Cols * CardW + (Cols - 1) * CardGap, GridHeight(MaxRows));
             _grid = grid.transform;
 
             var footRule = Img("Rule", panel.transform, null, Hairline);
@@ -446,7 +541,7 @@ namespace PrizeTracker.Core
             _modalNote = GameArt.Label("Text_Regular", panel.transform, "", 26, InkDim,
                                        TextAlignmentOptions.MidlineLeft);
             _modalNote.enableWordWrapping = true;
-            Place(_modalNote.rectTransform, 0, 0, 0, 0, 48, 58, 1300, 80);
+            Place(_modalNote.rectTransform, 0, 0, 0, 0, 48, 58, w - 560, 80);
 
             var copy = Img("CopyDeck", panel.transform, GameArt.Sprite("btn_Oct_16"), Slate);
             Place(copy, 1, 0, 1, 0, -48, 40, 380, 64);
@@ -498,8 +593,20 @@ namespace PrizeTracker.Core
                     Tile(cards[i].Key, cards[i].Value, shown++, m.OppNameAt(i, cards[i].Key));
                 }
 
+                int rows = Mathf.Clamp(Mathf.CeilToInt(shown / (float)Cols), 1, MaxRows);
+                if (_panel != null)
+                    _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, PanelHeight(rows));
+
                 int hidden = cards.Count - shown;
                 _modalNote.text = hidden > 0 ? "+" + hidden + " more not shown." : "";
+
+                // Says exactly what was drawn, so "it looks the same" can be told apart from
+                // "the new code did not run" without guessing.
+                Plugin.Log.LogInfo("deck view: " + shown + " of " + cards.Count + " cards, "
+                    + rows + " row(s); card " + CardW + "x" + CardH + " gap " + CardGap
+                    + "; panel " + (_panel != null ? _panel.sizeDelta.ToString() : "?")
+                    + "; badge " + (CardW * BadgeW) + "x" + (CardH * BadgeH)
+                    + " at " + BadgeCx + "," + BadgeCy);
 
                 _copyDeckLabel.text = "COPY AS DECKLIST";
                 _modal.SetActive(true);
@@ -527,7 +634,7 @@ namespace PrizeTracker.Core
             var tex = CardArt.Instance != null ? CardArt.Instance.Get(sourceId) : null;
             if (tex != null)
             {
-                AttachTexture((RectTransform)tile.transform, tex);
+                AttachTexture((RectTransform)tile.transform, tex, CardUv);
             }
             else
             {
@@ -548,14 +655,16 @@ namespace PrizeTracker.Core
                     Key = sourceId,
                     Holder = (RectTransform)tile.transform,
                     Fallback = plate.gameObject,
+                    Uv = CardUv,
                 });
             }
 
             var badge = Img("Count", tile.transform, GameArt.Hex(), new Color(0.82f, 0.13f, 0.15f, 1f));
             badge.GetComponent<Image>().type = Image.Type.Simple;
-            Place(badge, 0, 0, 0.5f, 0.5f, 34, 34, 62, 70);
+            Place(badge, 0, 0, 0.5f, 0.5f,
+                  CardW * BadgeCx, CardH * (1f - BadgeCy), CardW * BadgeW, CardH * BadgeH);
             var n = GameArt.Label("Text_Bold", badge, count.ToString(), Color.white,
-                                  TextAlignmentOptions.Center, 32);
+                                  TextAlignmentOptions.Center, 28);
             Stretch(n.rectTransform);
         }
 
@@ -720,7 +829,12 @@ namespace PrizeTracker.Core
             {
                 if (l == null || l.font == null || l.canvas == null) continue;
                 if (any == null) any = l;
-                if (l.font.name == fontName) { _fontSamples[fontName] = l; return l; }
+                if (l.font.name != fontName) continue;
+                _fontSamples[fontName] = l;
+                Plugin.Log.LogInfo("game art: font \"" + fontName + "\" cloned from " + l.name +
+                                   " (material \"" + (l.fontSharedMaterial != null
+                                       ? l.fontSharedMaterial.name : "none") + "\").");
+                return l;
             }
             if (any != null) Plugin.Log.LogWarning("game art: font \"" + fontName + "\" not in use; " +
                                                   "falling back to \"" + any.font.name + "\".");
@@ -746,6 +860,16 @@ namespace PrizeTracker.Core
                 if (child != go.transform) UnityEngine.Object.Destroy(child.gameObject);
 
             var lbl = go.GetComponent<TextMeshProUGUI>();
+
+            // Reset to the font asset's OWN material.
+            //
+            // A label that lives inside a mask carries a stencil-modified material, and cloning it
+            // brings that stencil along. In an unmasked canvas the stencil test never passes and
+            // the label renders nothing at all - which is exactly how every Text_Medium label
+            // vanished while Text_Bold and Text_Regular were fine: the sample happened to sit
+            // inside a masked region.
+            if (lbl.font != null) lbl.fontSharedMaterial = lbl.font.material;
+
             lbl.text = text;
             lbl.fontSize = size;
             lbl.color = color;

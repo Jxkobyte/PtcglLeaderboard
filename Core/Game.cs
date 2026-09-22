@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using MatchLogic;
 using SharedSDKUtils;
@@ -79,6 +79,37 @@ namespace PrizeTracker.Core
         /// (cardID -> count). Replaces the old clipboard/"press Export" flow, which required a
         /// manual click before every match and silently went stale if you switched decks.
         /// </summary>
+        /// <summary>
+        /// The deck actually being played THIS match, from the match's own player details.
+        ///
+        /// Not the same thing as the inventory's "active deck". Test vs AI plays whichever deck you
+        /// pressed Test on, and the inventory's active deck can be something else entirely - in
+        /// which case the tracker loads 60 cards that are not on the table, the decklist sanity
+        /// gate trips, and prizes never solve. The match tells us which deck it dealt; that is
+        /// always the right answer, so it is tried first.
+        /// </summary>
+        public static Dictionary<string, int> MatchDeck(global::RainierClientSDK.MatchInfo info,
+                                                        out string deckName, out DeckInfo deck)
+        {
+            deckName = null; deck = null;
+            try
+            {
+                var all = NetworkMatchController.playerDetails;
+                if (all == null || info == null) return null;
+                foreach (var p in all)
+                {
+                    if (p == null || p.deckInfo == null) continue;
+                    if (string.IsNullOrEmpty(info.accountID) || p.playerId != info.accountID) continue;
+                    if (p.deckInfo.cards == null || p.deckInfo.cards.Count == 0) continue;
+                    deck = p.deckInfo;
+                    deckName = p.deckInfo.deckName;
+                    return new Dictionary<string, int>(p.deckInfo.cards);
+                }
+            }
+            catch { }
+            return null;
+        }
+
         public static Dictionary<string, int> ActiveDeck(out string deckName)
         {
             deckName = null;
@@ -149,6 +180,80 @@ namespace PrizeTracker.Core
                 DeckInfo deck;
                 if (!pim.TryGetActiveDeck(NetworkMatchController.gameMode, out deck) || deck == null) return "";
                 return deck.id ?? "";
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>
+        /// A card that stands for the deck, for the match history thumbnail.
+        ///
+        /// The deck BOX texture turned out to be the UV unwrap for a 3D model - front panel, wrap
+        /// pattern and end faces all laid out in one image - so drawing it needs a crop measured
+        /// off the model, and an approximate crop looks worse than no art. A card is already the
+        /// right shape and loads through the same path as every other card.
+        ///
+        /// Picks the deck's headline Pokemon: highest prize value first (an ex or a Mega), then
+        /// highest HP. That is the card a player would name the deck after.
+        /// </summary>
+        public static string ActiveDeckCoverCard()
+        {
+            string name;
+            var cards = ActiveDeck(out name);
+            return CoverCardOf(cards);
+        }
+
+        /// <summary>
+        /// The deck's CARD SLEEVE id - the card-shaped art the client's own deck tile shows in
+        /// front of the box, which is what a player recognises a deck by.
+        ///
+        /// This is not a card from the deck. DeckCustomizationTrio.SetupForDeck draws exactly
+        /// three things - deckBox, coin and sleeve - and the card-shaped one is the sleeve, so
+        /// picking a "headline Pokemon" out of the deck list was never going to match it.
+        /// </summary>
+        public static string SleeveOf(DeckInfo deck)
+        {
+            return deck == null ? "" : (deck.sleeve ?? "");
+        }
+
+        /// <summary>The active deck's sleeve id, or empty.</summary>
+        public static string ActiveDeckSleeve()
+        {
+            try
+            {
+                var pim = ManagerSingleton<PlayerInventoryManager>.instance;
+                if (pim == null) return "";
+                DeckInfo deck;
+                if (!pim.TryGetActiveDeck(NetworkMatchController.gameMode, out deck) || deck == null) return "";
+                return deck.sleeve ?? "";
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>Cover card for a specific deck, or null when it cannot be read.</summary>
+        public static string CoverCardOf(DeckInfo deck)
+        {
+            return deck == null || deck.cards == null ? null : CoverCardOf(deck.cards);
+        }
+
+        private static string CoverCardOf(Dictionary<string, int> cards)
+        {
+            try
+            {
+                if (cards == null) return "";
+
+                string best = null;
+                int bestPrize = -1, bestHp = -1;
+                foreach (var kvp in cards)
+                {
+                    CardSource cs;
+                    try { cs = CardCache.Get(kvp.Key); } catch { continue; }
+                    if (cs == null || cs.cardFormat != CardFormat.Pokemon) continue;
+                    if (cs.prizeValue > bestPrize || (cs.prizeValue == bestPrize && cs.hp > bestHp))
+                    {
+                        best = kvp.Key; bestPrize = cs.prizeValue; bestHp = cs.hp;
+                    }
+                }
+                return best ?? "";
             }
             catch { return ""; }
         }
