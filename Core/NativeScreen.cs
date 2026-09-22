@@ -31,6 +31,8 @@ namespace PrizeTracker.Core
         private readonly List<GameObject> _rows = new List<GameObject>();
         private Transform _body;
         private TextMeshProUGUI _summary, _empty;
+        private readonly Pager _pager = new Pager(RowsPerPage);
+        private TextMeshProUGUI _pagePrev, _pageNext, _pageLabel;
         private bool _built;
 
         // deck preview
@@ -172,6 +174,7 @@ namespace PrizeTracker.Core
         public override void OnActivate(HUBGroupController prevGroup)
         {
             base.OnActivate(prevGroup);
+            _pager.Reset();
             try { Populate(); }
             catch (Exception e) { Plugin.Log.LogWarning("history screen populate failed: " + e.Message); }
         }
@@ -194,6 +197,10 @@ namespace PrizeTracker.Core
 
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 130f, RowGap = 8f;
+
+        // The rows area is 1040 tall and a row occupies 138 with its gap, so seven fit. The eighth
+        // would overhang the panel, which is what the paging strip below exists to avoid.
+        private const int RowsPerPage = 7;
 
         public void Build()
         {
@@ -232,6 +239,14 @@ namespace PrizeTracker.Core
                                    34, InkDim, TextAlignmentOptions.Top);
             Place(_empty.rectTransform, 0.5f, 1, 0.5f, 1, 0, -300, 1600, 56);
 
+            _pageLabel = GameArt.Label("Text_Regular", panel.transform, "", 28, InkDim,
+                                       TextAlignmentOptions.Center);
+            Place(_pageLabel.rectTransform, 0.5f, 0, 0.5f, 0, 0, 40, 420, 44);
+            _pagePrev = PageButton(panel.transform, "PREV", -260,
+                                   () => { if (_pager.Move(-1, HistoryCount())) Populate(); });
+            _pageNext = PageButton(panel.transform, "NEXT", 260,
+                                   () => { if (_pager.Move(+1, HistoryCount())) Populate(); });
+
             BuildModal(root);
         }
 
@@ -251,8 +266,42 @@ namespace PrizeTracker.Core
 
             _empty.gameObject.SetActive(History.Count == 0);
 
+            int total = HistoryCount();
             float y = 0f;
-            foreach (var m in History.Recent(7)) Row(m, ref y);
+            foreach (var m in History.Page(_pager.Start(total), _pager.Count(total))) Row(m, ref y);
+
+            SetPageButton(_pagePrev, _pager.CanPrev(total));
+            SetPageButton(_pageNext, _pager.CanNext(total));
+            if (_pageLabel != null) _pageLabel.text = _pager.Label(total);
+        }
+
+        private int HistoryCount() { return History != null ? History.Count : 0; }
+
+        private TextMeshProUGUI PageButton(Transform panel, string text, float x, Action onClick)
+        {
+            var btn = Img("Page" + text, panel, GameArt.Sprite("btn_Oct_16"),
+                          new Color(0.93f, 0.94f, 0.95f, 1f));
+            Place(btn, 0.5f, 0, 0.5f, 0, x, 40, 210, 58);
+            var label = GameArt.Label("Text_MediumItalic", btn, text, InkDim,
+                                      TextAlignmentOptions.Center, 28);
+            Stretch(label.rectTransform);
+            // Img() turns raycasting off - right for decoration, fatal for a button.
+            var img = btn.GetComponent<Image>();
+            img.raycastTarget = true;
+            var b = btn.gameObject.AddComponent<Button>();
+            b.targetGraphic = img;
+            b.onClick.AddListener(() => onClick());
+            return label;
+        }
+
+        /// <summary>A page button that cannot go anywhere is dimmed, not hidden.</summary>
+        private static void SetPageButton(TextMeshProUGUI label, bool enabled)
+        {
+            if (label == null) return;
+            label.color = enabled ? InkDim : new Color(0.80f, 0.81f, 0.83f, 1f);
+            var btn = label.transform.parent != null
+                ? label.transform.parent.GetComponent<Button>() : null;
+            if (btn != null) btn.interactable = enabled;
         }
 
         /// <summary>

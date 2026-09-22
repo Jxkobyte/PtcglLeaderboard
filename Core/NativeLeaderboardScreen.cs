@@ -35,7 +35,9 @@ namespace PrizeTracker.Core
 
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 92f, RowGap = 6f;
-        private const int VisibleRows = 9;
+        // Eight, not nine. Body starts at 212 and the footer rule sits 1132 from the top, leaving
+        // 920px; nine rows plus the pinned row wanted 984 and drew straight over the footer.
+        private const int VisibleRows = 8;
         private const float BodyTop = 212f;
 
         private bool _built;
@@ -45,6 +47,8 @@ namespace PrizeTracker.Core
         private readonly List<GameObject> _rows = new List<GameObject>();
         private BoardState _rendered;
         private float _nextTick;
+        private readonly Pager _pager = new Pager(VisibleRows);
+        private TextMeshProUGUI _pagePrev, _pageNext, _pageLabel;
 
         private class PendingArt { public string Bundle, Asset; public RawImage Target; }
         private readonly List<PendingArt> _pending = new List<PendingArt>();
@@ -58,6 +62,7 @@ namespace PrizeTracker.Core
             try
             {
                 Build();
+                _pager.Reset();
                 if (Board != null) Board.Refresh(true);
                 Populate();
             }
@@ -129,6 +134,45 @@ namespace PrizeTracker.Core
 
             _status = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineRight);
             NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 62, 700, 40);
+
+            // Paging sits just above the footer rule, clear of both the rows and the status line.
+            _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
+            NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 0, 0.5f, 0, 0, 152, 360, 40);
+            _pagePrev = PageButton(panel, "PREV", -230, () => { if (_pager.Move(-1, Total())) Populate(); });
+            _pageNext = PageButton(panel, "NEXT", 230, () => { if (_pager.Move(+1, Total())) Populate(); });
+        }
+
+        private int Total()
+        {
+            var st = Board != null ? Board.State : null;
+            return st != null ? st.Players.Count : 0;
+        }
+
+        private TextMeshProUGUI PageButton(Transform panel, string text, float x, Action onClick)
+        {
+            var btn = Img("Page" + text, panel, GameArt.Sprite("btn_Oct_16"),
+                          new Color(0.93f, 0.94f, 0.95f, 1f));
+            NativeHistoryScreen.Place(btn, 0.5f, 0, 0.5f, 0, x, 152, 190, 52);
+            var label = GameArt.Label("Text_MediumItalic", btn, text, InkDim,
+                                      TextAlignmentOptions.Center, 26);
+            NativeHistoryScreen.Stretch(label.rectTransform);
+            // Img() turns raycasting off, which is right for decoration and fatal for a button.
+            var img = btn.GetComponent<Image>();
+            img.raycastTarget = true;
+            var b = btn.gameObject.AddComponent<Button>();
+            b.targetGraphic = img;
+            b.onClick.AddListener(() => onClick());
+            return label;
+        }
+
+        /// <summary>A page button that cannot go anywhere is dimmed, not hidden.</summary>
+        private static void SetPageButton(TextMeshProUGUI label, bool enabled)
+        {
+            if (label == null) return;
+            label.color = enabled ? InkDim : new Color(0.80f, 0.81f, 0.83f, 1f);
+            var btn = label.transform.parent != null
+                ? label.transform.parent.GetComponent<Button>() : null;
+            if (btn != null) btn.interactable = enabled;
         }
 
         private static void Col(Transform parent, string text, float x, float w, TextAlignmentOptions align)
@@ -158,6 +202,9 @@ namespace PrizeTracker.Core
                     : (Board.Busy ? "Loading..."
                        : !string.IsNullOrEmpty(Board.LastError) ? "Could not reach the leaderboard.\n" + Board.LastError
                        : "No one has reached Master this season yet.");
+                SetPageButton(_pagePrev, false);
+                SetPageButton(_pageNext, false);
+                if (_pageLabel != null) _pageLabel.text = "";
                 UpdateStatus();
                 return;
             }
@@ -166,7 +213,9 @@ namespace PrizeTracker.Core
             string myId = Board != null ? Board.PlayerId : "";
             float y = 0f;
             bool meShown = false;
-            for (int i = 0; i < st.Players.Count && i < VisibleRows; i++)
+            int total = st.Players.Count;
+            int start = _pager.Start(total), shown = _pager.Count(total);
+            for (int i = start; i < start + shown; i++)
             {
                 var p = st.Players[i];
                 bool me = !string.IsNullOrEmpty(myId) && p.PlayerId == myId;
@@ -175,6 +224,10 @@ namespace PrizeTracker.Core
                 y += RowH + RowGap;
             }
 
+            SetPageButton(_pagePrev, _pager.CanPrev(total));
+            SetPageButton(_pageNext, _pager.CanNext(total));
+            if (_pageLabel != null) _pageLabel.text = _pager.Label(total);
+
             // Your own row, pinned below the list when you are not in the visible part of it.
             if (!meShown && st.Me != null)
             {
@@ -182,7 +235,7 @@ namespace PrizeTracker.Core
                 host.transform.SetParent(_body.parent, false);
                 _pinned = (RectTransform)host.transform;
                 NativeHistoryScreen.Place(_pinned, 0.5f, 1, 0.5f, 1, 0,
-                                          -(BodyTop + VisibleRows * (RowH + RowGap) + 10f), RowW, RowH);
+                                          -(BodyTop + VisibleRows * (RowH + RowGap) + 8f), RowW, RowH);
                 Row(_pinned, st.Me, 0f, true, RowA);
             }
 
@@ -201,8 +254,10 @@ namespace PrizeTracker.Core
                 NativeHistoryScreen.Place(bar, 0, 0.5f, 0, 0.5f, 10, 0, 6, RowH - 24);
             }
 
-            var rank = GameArt.Label("Text_Medium", row, p.Rank.ToString(), 32, me ? Accent : InkDim,
-                                     TextAlignmentOptions.MidlineLeft);
+            // Rank 0 means unranked - below Master - so show a dash rather than a position that
+            // does not exist. "0" read as a real standing, and a very bad one.
+            var rank = GameArt.Label("Text_Medium", row, p.Rank > 0 ? p.Rank.ToString() : "–",
+                                     32, me ? Accent : InkDim, TextAlignmentOptions.MidlineLeft);
             NativeHistoryScreen.Place(rank.rectTransform, 0, 0.5f, 0, 0.5f, 30, 0, 80, 44);
 
             Badge(row, p.Exp, 120);

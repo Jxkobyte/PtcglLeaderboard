@@ -176,11 +176,14 @@ export function checkSnapshot(s, prev, t) {
     if (played > 1 + Math.floor(elapsed / MIN_SECONDS_PER_MATCH)) flags.push('impossible-rate');
   }
 
-  // Our own tracker's count of matches this season against the game's. They should track each
-  // other; a large gap means one of them is not what it claims to be.
-  if (s.localMatches > 0) {
-    const gap = Math.abs(s.localMatches - s.seasonMatches);
-    if (gap > Math.max(3, Math.floor(s.seasonMatches * 0.2))) flags.push('local-mismatch');
+  // Our own tracker's count of matches this season against the game's.
+  //
+  // Only an EXCESS is suspicious. Counting fewer is the normal case and says nothing: the tracker
+  // only sees matches played since it was installed, so anyone who installs mid-season reports a
+  // small number against a large one - a real account showed 9 against 85 and got flagged for it.
+  // Claiming MORE matches than the game recorded is the direction that cannot happen honestly.
+  if (s.localMatches > s.seasonMatches + Math.max(3, Math.floor(s.seasonMatches * 0.2))) {
+    flags.push('local-mismatch');
   }
 
   return flags;

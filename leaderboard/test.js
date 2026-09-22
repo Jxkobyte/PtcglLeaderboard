@@ -148,14 +148,19 @@ test('more matches than the clock allows is flagged', async () => {
   assert.ok(!r2.body.flags.includes('impossible-rate'));
 });
 
-test('our own match count disagreeing with the game is flagged, small gaps are not', async () => {
+test('claiming MORE matches than the game is flagged; counting fewer never is', async () => {
   const e = env(), c = clock();
-  const near = await post(e, c, { ...base, playerId: 'player-near0000', localMatches: 28 });
-  assert.ok(!near.body.flags.includes('local-mismatch'));
-  const far = await post(e, c, { ...base, playerId: 'player-far00000', localMatches: 5 });
-  assert.ok(far.body.flags.includes('local-mismatch'));
+  // Under-counting is the normal case - the tracker only sees matches since it was installed -
+  // so a mid-season install reporting 5 against 30 must not be flagged.
+  const fewer = await post(e, c, { ...base, playerId: 'player-fewer001', localMatches: 5 });
+  assert.ok(!fewer.body.flags.includes('local-mismatch'));
   const none = await post(e, c, { ...base, playerId: 'player-none0000', localMatches: 0 });
   assert.ok(!none.body.flags.includes('local-mismatch'));
+  const near = await post(e, c, { ...base, playerId: 'player-near0000', localMatches: 32 });
+  assert.ok(!near.body.flags.includes('local-mismatch'));
+  // More matches than the game recorded cannot happen honestly.
+  const more = await post(e, c, { ...base, playerId: 'player-more0000', localMatches: 90 });
+  assert.ok(more.body.flags.includes('local-mismatch'));
 });
 
 test('a brand-new player with a big record is labelled new at read time', async () => {

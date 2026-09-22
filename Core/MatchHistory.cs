@@ -362,6 +362,16 @@ namespace PrizeTracker.Core
             return list.Take(n).ToList();
         }
 
+        /// <summary>A slice of the history, newest first - one page of the match list.</summary>
+        public List<MatchRecord> Page(int start, int count)
+        {
+            var list = new List<MatchRecord>(_records);
+            list.Reverse();
+            if (start < 0) start = 0;
+            if (start >= list.Count || count <= 0) return new List<MatchRecord>();
+            return list.Skip(start).Take(count).ToList();
+        }
+
         /// <summary>
         /// Win/loss for one specific deck, by name.
         ///
