@@ -8,4 +8,4 @@ compatibility_date = "2026-04-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "prizetracker-leaderboard"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "a0267279-d2b3-434b-807a-a929a3d35b6b"
