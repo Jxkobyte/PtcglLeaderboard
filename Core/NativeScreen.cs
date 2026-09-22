@@ -357,14 +357,31 @@ namespace PrizeTracker.Core
 
             var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
                                      TextAlignmentOptions.MidlineRight);
-            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, 1700, 0, 250, 40);
+            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, 1478, 0, 210, 40);
+
+            // ADD FRIEND, the same request the client's own end-of-match button sends.
+            //
+            // Already a friend, or no name recorded, leaves it visible but disabled rather than
+            // absent: a button that vanishes on some rows reads as a bug, while a dimmed one with
+            // "FRIENDS" on it answers the question being asked.
+            bool named = !string.IsNullOrEmpty(m.Opponent);
+            bool friends = named && Friends.AlreadyFriends(m.Opponent);
+            TextMeshProUGUI addLabel = null;
+            addLabel = Button(row, friends ? "FRIENDS" : "ADD FRIEND", 1700, 230, false,
+                              named && !friends, () =>
+            {
+                // Explicit click only. This sends a real message to a real player.
+                Friends.Send(m.Opponent, (ok, why) =>
+                    StartCoroutine(Confirm(addLabel, ok ? "SENT!" : (why ?? "FAILED").ToUpperInvariant(),
+                                           "ADD FRIEND")));
+            });
 
             bool hasCards = m.OppCardsSeen() > 0;
-            Button(row, "VIEW DECK", 1730, 210, true, hasCards, () => OpenDeck(m));
+            Button(row, "VIEW DECK", 1944, 200, true, hasCards, () => OpenDeck(m));
 
             bool hasLog = !string.IsNullOrEmpty(m.Log);
             TextMeshProUGUI logLabel = null;
-            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", 1954, 190, false, hasLog, () =>
+            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", 2158, 180, false, hasLog, () =>
             {
                 try
                 {
