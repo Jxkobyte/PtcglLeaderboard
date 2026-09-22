@@ -35,9 +35,17 @@ namespace PrizeTracker.Core
 
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 92f, RowGap = 6f;
-        // Eight, not nine. Body starts at 212 and the footer rule sits 1132 from the top, leaving
-        // 920px; nine rows plus the pinned row wanted 984 and drew straight over the footer.
-        private const int VisibleRows = 8;
+        // Seven. The vertical budget, measured from the panel top: rows start at 212 and the
+        // footer rule sits at 1132, so everything between has 920px. Seven rows take 686, the
+        // pinned "you" row another 92, and the paging strip 52 - 830 with room to breathe. Eight
+        // rows left only 36px for a 52px strip, which is how the strip ended up drawn through
+        // the pinned row.
+        private const int VisibleRows = 7;
+
+        // Derived, not guessed: each strip sits directly below the thing above it, so changing
+        // the row count cannot silently reintroduce an overlap.
+        private const float PinnedTop = BodyTop + VisibleRows * (RowH + RowGap) + 8f;
+        private const float PagingTop = PinnedTop + RowH + 16f;
         private const float BodyTop = 212f;
 
         private bool _built;
@@ -133,11 +141,11 @@ namespace PrizeTracker.Core
             NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 62, 1500, 40);
 
             _status = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 62, 700, 40);
+            NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 62, 1020, 40);
 
             // Paging sits just above the footer rule, clear of both the rows and the status line.
             _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
-            NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 0, 0.5f, 0, 0, 152, 360, 40);
+            NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 1, 0, -PagingTop, 360, 40);
             _pagePrev = PageButton(panel, "PREV", -230, () => { if (_pager.Move(-1, Total())) Populate(); });
             _pageNext = PageButton(panel, "NEXT", 230, () => { if (_pager.Move(+1, Total())) Populate(); });
         }
@@ -152,7 +160,7 @@ namespace PrizeTracker.Core
         {
             var btn = Img("Page" + text, panel, GameArt.Sprite("btn_Oct_16"),
                           new Color(0.93f, 0.94f, 0.95f, 1f));
-            NativeHistoryScreen.Place(btn, 0.5f, 0, 0.5f, 0, x, 152, 190, 52);
+            NativeHistoryScreen.Place(btn, 0.5f, 1, 0.5f, 1, x, -PagingTop, 190, 52);
             var label = GameArt.Label("Text_MediumItalic", btn, text, InkDim,
                                       TextAlignmentOptions.Center, 26);
             NativeHistoryScreen.Stretch(label.rectTransform);
@@ -234,8 +242,7 @@ namespace PrizeTracker.Core
                 var host = new GameObject("Pinned", typeof(RectTransform));
                 host.transform.SetParent(_body.parent, false);
                 _pinned = (RectTransform)host.transform;
-                NativeHistoryScreen.Place(_pinned, 0.5f, 1, 0.5f, 1, 0,
-                                          -(BodyTop + VisibleRows * (RowH + RowGap) + 8f), RowW, RowH);
+                NativeHistoryScreen.Place(_pinned, 0.5f, 1, 0.5f, 1, 0, -PinnedTop, RowW, RowH);
                 Row(_pinned, st.Me, 0f, true, RowA);
             }
 
@@ -389,7 +396,7 @@ namespace PrizeTracker.Core
             else if (!string.IsNullOrEmpty(Board.LastError)) _status.text = Board.LastError;
             else if (st != null && st.Me != null && !st.Me.Master)
                 _status.text = "Sharing as " + Board.EffectiveName + "   ·   " +
-                               LeagueTitle(st.Me.Exp) + " - the board ranks Master only";
+                               LeagueTitle(st.Me.Exp) + " - Master only on the board";
             else _status.text = "Sharing as " + Board.EffectiveName +
                                 (string.IsNullOrEmpty(Board.LastSubmit) ? "" : "   ·   last submit: " + Board.LastSubmit);
         }
