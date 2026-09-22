@@ -99,18 +99,19 @@ async function postSnapshot(request, env, now) {
       .bind(s.playerId, s.displayName, firstSeen, t),
     env.DB.prepare(
       'INSERT INTO snapshot (player_id, season_id, exp, wins, losses, season_matches, consecutive_wins, ' +
-      'local_matches, client_ts, received_ts, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      'elo, local_matches, client_ts, received_ts, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(s.playerId, s.seasonId, s.exp, s.wins, s.losses, s.seasonMatches, s.consecutiveWins,
-            s.localMatches, s.clientTs, t, JSON.stringify(flags)),
+            s.elo, s.localMatches, s.clientTs, t, JSON.stringify(flags)),
     env.DB.prepare(
       'INSERT INTO standing (season_id, player_id, display_name, exp, wins, losses, season_matches, ' +
-      'consecutive_wins, snapshots, first_seen, last_seen, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+      'consecutive_wins, elo, snapshots, first_seen, last_seen, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT(season_id, player_id) DO UPDATE SET display_name = excluded.display_name, ' +
       'exp = excluded.exp, wins = excluded.wins, losses = excluded.losses, ' +
       'season_matches = excluded.season_matches, consecutive_wins = excluded.consecutive_wins, ' +
-      'snapshots = excluded.snapshots, last_seen = excluded.last_seen, flags = excluded.flags')
+      'elo = excluded.elo, snapshots = excluded.snapshots, last_seen = excluded.last_seen, ' +
+      'flags = excluded.flags')
       .bind(s.seasonId, s.playerId, s.displayName, s.exp, s.wins, s.losses, s.seasonMatches,
-            s.consecutiveWins, snapshots, firstSeen, t, JSON.stringify(unionFlags)),
+            s.consecutiveWins, s.elo, snapshots, firstSeen, t, JSON.stringify(unionFlags)),
   ];
   if (s.endDate) {
     writes.push(env.DB.prepare(
@@ -204,6 +205,7 @@ export function validateSnapshot(b) {
   if (exp == null || wins == null || losses == null || seasonMatches == null) return { error: 'counters' };
 
   const consecutiveWins = int(b.consecutiveWins, 0, 100000) ?? 0;
+  const elo = int(b.elo, 0, 100000) ?? 0;
   const localMatches = int(b.localMatches, 0, 200000) ?? 0;
   const clientTs = int(b.clientTs, 0, 4102444800) ?? null;
 
@@ -213,7 +215,7 @@ export function validateSnapshot(b) {
   }
 
   return { value: { playerId, displayName, seasonId, exp, wins, losses, seasonMatches,
-                    consecutiveWins, localMatches, clientTs, endDate } };
+                    consecutiveWins, elo, localMatches, clientTs, endDate } };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -231,7 +233,9 @@ async function getLeaderboard(url, env, now) {
   const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ?').bind(seasonId).first();
 
   const rows = await env.DB
-    .prepare('SELECT * FROM standing WHERE season_id = ? ORDER BY exp DESC, season_matches DESC, last_seen ASC LIMIT ?')
+    // exp first, then elo: inside Master exp barely moves (one rank spans 550-15000) so elo is
+    // what actually separates the top of the board.
+    .prepare('SELECT * FROM standing WHERE season_id = ? ORDER BY exp DESC, elo DESC, season_matches DESC, last_seen ASC LIMIT ?')
     .bind(seasonId, limit).all();
 
   const players = (rows.results || []).map((r, i) => publicRow(r, i + 1, t));
@@ -267,7 +271,7 @@ async function getPlayer(id, url, env, now) {
   const t = now();
   const standing = publicRow(r, await rankOf(env, seasonId, Number(r.exp), Number(r.season_matches)), t);
   const snaps = await env.DB
-    .prepare('SELECT exp, wins, losses, season_matches, received_ts, flags FROM snapshot ' +
+    .prepare('SELECT exp, wins, losses, season_matches, elo, received_ts, flags FROM snapshot ' +
              'WHERE player_id = ? AND season_id = ? ORDER BY received_ts DESC, id DESC LIMIT 50')
     .bind(id, seasonId).all();
 
@@ -275,7 +279,8 @@ async function getPlayer(id, url, env, now) {
     standing,
     snapshots: (snaps.results || []).map(s => ({
       exp: Number(s.exp), wins: Number(s.wins), losses: Number(s.losses),
-      seasonMatches: Number(s.season_matches), receivedTs: Number(s.received_ts),
+      seasonMatches: Number(s.season_matches), elo: Number(s.elo || 0),
+      receivedTs: Number(s.received_ts),
       flags: parseFlags(s.flags),
     })),
   });
@@ -327,6 +332,7 @@ function publicRow(r, rank, t) {
     losses: Number(r.losses),
     seasonMatches: Number(r.season_matches),
     consecutiveWins: Number(r.consecutive_wins),
+    elo: Number(r.elo || 0),
     snapshots: Number(r.snapshots),
     firstSeen: Number(r.first_seen),
     lastSeen: Number(r.last_seen),

@@ -17,7 +17,7 @@ namespace PrizeTracker.Core
         public int Rank;
         public string PlayerId = "";
         public string DisplayName = "";
-        public int Exp, Wins, Losses, SeasonMatches, ConsecutiveWins, Snapshots;
+        public int Exp, Wins, Losses, SeasonMatches, ConsecutiveWins, Snapshots, Elo;
         public long FirstSeen, LastSeen;
         public List<string> Flags = new List<string>();
 
@@ -88,11 +88,40 @@ namespace PrizeTracker.Core
         private readonly ConcurrentQueue<Action> _mainThread = new ConcurrentQueue<Action>();
         private float _nextRefreshAllowed;
         private float _nextNameCheck;
+        private bool _loggedRank;
 
         private void Update()
         {
             Action a;
             while (_mainThread.TryDequeue(out a)) { try { a(); } catch (Exception e) { Plugin.Log.LogWarning("leaderboard: " + e.Message); } }
+
+            // Report the season record once it is readable, ONCE. exp and competitiveElo are
+            // different numbers from the same object and it matters which the board shows: exp
+            // drives the league badge (Master starts at 550 in the season config) while
+            // competitiveElo is the matchmaking rating. Printing both settles it from real data.
+            if (!_loggedRank)
+            {
+                try
+                {
+                    uint e = SeasonRank.exp, w = SeasonRank.wins, l = SeasonRank.losses,
+                         m = SeasonRank.seasonMatches, idx = SeasonRank.seasonIndex;
+                    if (m > 0 || e > 0 || w > 0 || l > 0)
+                    {
+                        _loggedRank = true;
+                        var elo = "";
+                        try
+                        {
+                            foreach (var kv in SeasonRank.competitiveElo)
+                                elo += (elo.Length > 0 ? ", " : "") + kv.Key + "=" + kv.Value;
+                        }
+                        catch (Exception ex) { elo = "unreadable: " + ex.Message; }
+                        Plugin.Log.LogWarning("season record: season=" + idx + " exp=" + e +
+                            " wins=" + w + " losses=" + l + " matches=" + m +
+                            " | competitiveElo: " + (elo.Length == 0 ? "(empty)" : elo));
+                    }
+                }
+                catch { }
+            }
 
             // The in-game name is only readable while a match is running (it comes from the
             // match's player list), so it is learned then and remembered.
@@ -155,8 +184,17 @@ namespace PrizeTracker.Core
                 return;
             }
 
-            int seasonId = seasonIdx > 0 ? (int)seasonIdx : (Season != null ? Season.Id : 0);
+            // The CONFIG is authoritative for which season we are in, not SeasonRank.
+            //
+            // Measured on a real account: SeasonRank.seasonIndex reported 53 while
+            // season_current_0.0 said 54 - and season 53's own endDate had already passed. Trusting
+            // the index would have filed every submission against a season that closed a week
+            // earlier, on a board nobody is looking at.
+            int seasonId = Season != null && Season.Id > 0 ? Season.Id : (int)seasonIdx;
             if (seasonId <= 0) { LastSubmit = "no season"; return; }
+            if (seasonIdx > 0 && Season != null && Season.Id > 0 && (int)seasonIdx != Season.Id)
+                Plugin.Log.LogInfo("leaderboard: SeasonRank says season " + seasonIdx +
+                                   ", config says " + Season.Id + "; using the config.");
 
             var body = new JObject
             {
@@ -168,6 +206,7 @@ namespace PrizeTracker.Core
                 ["losses"] = losses,
                 ["seasonMatches"] = matches,
                 ["consecutiveWins"] = streak,
+                ["elo"] = ReadElo(),
                 ["localMatches"] = LocalMatchesThisSeason(),
                 ["clientTs"] = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds,
             };
@@ -188,6 +227,24 @@ namespace PrizeTracker.Core
                 Plugin.Log.LogInfo("leaderboard: " + LastSubmit);
                 Refresh(true);
             });
+        }
+
+        /// <summary>
+        /// Standard matchmaking rating. A DIFFERENT number from exp - measured together on a real
+        /// account as exp=529 (Ultra League 4) and competitiveElo Standard=1500 - so the board
+        /// shows both. Standard only, per the format this tool targets.
+        /// </summary>
+        private static int ReadElo()
+        {
+            try
+            {
+                var all = SeasonRank.competitiveElo;
+                if (all == null) return 0;
+                uint v;
+                if (all.TryGetValue(MatchLogic.GameMode.Standard, out v)) return (int)v;
+            }
+            catch { }
+            return 0;
         }
 
         private static bool ReadSeasonRank(out uint exp, out uint wins, out uint losses, out uint matches,
@@ -279,6 +336,7 @@ namespace PrizeTracker.Core
                 Losses = p.Value<int?>("losses") ?? 0,
                 SeasonMatches = p.Value<int?>("seasonMatches") ?? 0,
                 ConsecutiveWins = p.Value<int?>("consecutiveWins") ?? 0,
+                Elo = p.Value<int?>("elo") ?? 0,
                 Snapshots = p.Value<int?>("snapshots") ?? 0,
                 FirstSeen = p.Value<long?>("firstSeen") ?? 0,
                 LastSeen = p.Value<long?>("lastSeen") ?? 0,

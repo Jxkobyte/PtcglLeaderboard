@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -106,10 +106,10 @@ namespace PrizeTracker.Core
             NativeHistoryScreen.Place((RectTransform)head.transform, 0.5f, 1, 0.5f, 1, 0, -136, RowW, 40);
             Col(head.transform, "#", 30, 70, TextAlignmentOptions.MidlineLeft);
             Col(head.transform, "PLAYER", 215, 600, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "LEAGUE", 830, 300, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "EXP", 1150, 160, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "RECORD", 1340, 220, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "WIN %", 1580, 140, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "LEAGUE", 820, 300, TextAlignmentOptions.MidlineLeft);
+            Col(head.transform, "RATING", 1150, 200, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "RECORD", 1390, 220, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "WIN %", 1630, 130, TextAlignmentOptions.MidlineRight);
 
             var body = new GameObject("Body", typeof(RectTransform));
             body.transform.SetParent(panel, false);
@@ -215,23 +215,28 @@ namespace PrizeTracker.Core
 
             var league = GameArt.Label("Text_Regular", row, LeagueTitle(p.Exp), 28, InkDim,
                                        TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 830, 0, 300, 44);
+            NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 820, 0, 300, 44);
 
-            var exp = GameArt.Label("Text_Medium", row, p.Exp.ToString("N0"), 32, Ink,
-                                    TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(exp.rectTransform, 0, 0.5f, 0, 0.5f, 1150, 0, 160, 44);
+            // ONE rating column, because the two numbers are consecutive halves of the same climb
+            // rather than rivals. Exp separates players up to Master and then stops: the season
+            // config gives Master a single rank, arceus_league_rank1_arceus, spanning 550 all the
+            // way to 15000, so inside it exp says almost nothing and ELO is what still moves.
+            // Show whichever one is doing the work; the league beside it says which that is.
+            var rating = GameArt.Label("Text_Medium", row, RatingText(p), 32, Ink,
+                                       TextAlignmentOptions.MidlineRight);
+            NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, 1150, 0, 200, 44);
 
             // "120-60": 120 wins, 60 losses - the matches played, as a record.
             var rec = GameArt.Label("Text_Medium", row, p.Record, 32, Ink, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, 1340, 0, 220, 44);
+            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, 1390, 0, 220, 44);
 
             int played = p.Wins + p.Losses;
             string pct = played > 0 ? Mathf.RoundToInt(100f * p.Wins / played) + "%" : "-";
             var wr = GameArt.Label("Text_Regular", row, pct, 30, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, 1580, 0, 140, 44);
+            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, 1630, 0, 130, 44);
 
             // Flags are the board's honesty: they are shown, never hidden, and never block.
-            float fx = 1760f;
+            float fx = 1790f;
             foreach (var f in p.Flags)
             {
                 var label = FlagText(f);
@@ -288,6 +293,25 @@ namespace PrizeTracker.Core
                 p.Target.color = Color.white;
                 _pending.RemoveAt(i);
             }
+        }
+
+        /// <summary>
+        /// ELO once a player is in Master, exp before it. A Master player who has not reported an
+        /// ELO yet falls back to exp rather than showing a dash.
+        /// </summary>
+        private string RatingText(BoardRow p)
+        {
+            if (IsMaster(p.Exp) && p.Elo > 0) return p.Elo.ToString("N0");
+            return p.Exp.ToString("N0");
+        }
+
+        private bool IsMaster(int exp)
+        {
+            Season.League league; Season.Rank rank; int idx;
+            if (Season == null || !Season.RankFor((uint)Math.Max(0, exp), out league, out rank, out idx))
+                return false;
+            return league != null && league.Name != null &&
+                   league.Name.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private string LeagueTitle(int exp)

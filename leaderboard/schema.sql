@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS snapshot (
   losses           INTEGER NOT NULL,
   season_matches   INTEGER NOT NULL,
   consecutive_wins INTEGER NOT NULL DEFAULT 0,
+  -- The matchmaking rating, a DIFFERENT number from exp: measured on a real account,
+  -- exp=529 (Ultra League 4) alongside competitiveElo Standard=1500. Standard only.
+  elo              INTEGER NOT NULL DEFAULT 0,
   local_matches    INTEGER NOT NULL DEFAULT 0,   -- matches OUR tracker recorded this season
   client_ts        INTEGER,                      -- kept only to compare against received_ts
   received_ts      INTEGER NOT NULL,
@@ -46,6 +49,7 @@ CREATE TABLE IF NOT EXISTS standing (
   losses           INTEGER NOT NULL,
   season_matches   INTEGER NOT NULL,
   consecutive_wins INTEGER NOT NULL DEFAULT 0,
+  elo              INTEGER NOT NULL DEFAULT 0,
   snapshots        INTEGER NOT NULL,
   first_seen       INTEGER NOT NULL,
   last_seen        INTEGER NOT NULL,
