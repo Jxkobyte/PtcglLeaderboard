@@ -148,7 +148,7 @@ namespace PrizeTracker.Core
         // next set still sits where it should rather than being squashed to fit.
         private const float PlaqueW = 420f;
         private const float PlaqueH = PlaqueW * 288f / 1024f;
-        private const float PlaqueTop = 92f;
+        private const float PlaqueTop = 30f;
 
         private bool _built;
         private RectTransform _plaque;
@@ -239,14 +239,18 @@ namespace PrizeTracker.Core
             // there is simply no plaque, and the heading sits where it always did.
             _plaque = Img("Plaque", panel, null, new Color(1f, 1f, 1f, 0f));
             NativeHistoryScreen.Place(_plaque, 1, 1, 1, 1, -76, -PlaqueTop, PlaqueW, PlaqueH);
+            // Kept above the season line by construction: the line is placed from the plaque's
+            // own bottom edge, so a differently-shaped plaque next set pushes the text down
+            // rather than landing on it.
 
             var title = GameArt.Label("Text_Bold", panel, "LEADERBOARD", 44, Ink,
                                       TextAlignmentOptions.TopLeft);
             NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -34, 560, 70);
 
-            _subtitle = GameArt.Label("Text_Regular", panel, "", 28, InkDim, TextAlignmentOptions.TopRight);
+            _subtitle = GameArt.Label("Text_Medium", panel, "", 28, Ink, TextAlignmentOptions.TopRight);
             _subtitle.enableWordWrapping = true;
-            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -76, -36, 420, 120);
+            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -76,
+                                      -(PlaqueTop + PlaqueH + 14f), PlaqueW, 80);
 
             // Built BEFORE the podium so it sits behind it: this canvas draws in sibling order.
             var stage = Img("Stage", panel, GameArt.Sprite("btn_Oct_20"), StageBg);
@@ -757,7 +761,7 @@ namespace PrizeTracker.Core
             {
                 var tmp = new Season { EndUtc = end };
                 left = tmp.TimeLeftText(now);
-                left = left == "ended" ? "season ended" : "resets in " + left;
+                left = left == "ended" ? "season ended" : left + " left";
             }
             _subtitle.text = (seasonId > 0 ? "Season " + seasonId : "") +
                              (left.Length > 0 ? "   ·   " + left : "");
