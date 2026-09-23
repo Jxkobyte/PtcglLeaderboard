@@ -22,6 +22,7 @@ namespace PrizeTracker.Core
     {
         public Leaderboard Board;
         public Season Season;
+        public MatchHistory History;
 
         private static readonly Color Ink = new Color(0.16f, 0.17f, 0.20f, 1f);
         private static readonly Color InkDim = new Color(0.55f, 0.57f, 0.61f, 1f);
@@ -30,26 +31,62 @@ namespace PrizeTracker.Core
         private static readonly Color RowA = new Color(0.965f, 0.968f, 0.975f, 1f);
         private static readonly Color RowB = new Color(0.985f, 0.987f, 0.990f, 1f);
         private static readonly Color Hairline = new Color(0f, 0f, 0f, 0.10f);
+
+        // Medal colours for the podium, and a darker shade of each for the plinth's face so the
+        // numeral on it stays legible against the lighter top.
+        private static readonly Color[] Medal =
+        {
+            new Color(0.839f, 0.678f, 0.220f, 1f),   // gold
+            new Color(0.686f, 0.718f, 0.753f, 1f),   // silver
+            new Color(0.729f, 0.478f, 0.259f, 1f),   // bronze
+        };
+        private static readonly Color[] MedalDim =
+        {
+            new Color(0.949f, 0.906f, 0.784f, 1f),
+            new Color(0.925f, 0.933f, 0.945f, 1f),
+            new Color(0.941f, 0.882f, 0.827f, 1f),
+        };
         private static readonly Color FlagBg = new Color(0.984f, 0.941f, 0.824f, 1f);
         private static readonly Color FlagInk = new Color(0.54f, 0.43f, 0.12f, 1f);
 
-        private const float PanelW = 2260f, PanelH = 1240f;
-        private const float RowW = 2100f, RowH = 92f, RowGap = 6f;
-        // Seven. The vertical budget, measured from the panel top: rows start at 212 and the
-        // footer rule sits at 1132, so everything between has 920px. Seven rows take 686, the
-        // pinned "you" row another 92, and the paging strip 52 - 830 with room to breathe. Eight
-        // rows left only 36px for a 52px strip, which is how the strip ended up drawn through
-        // the pinned row.
-        private const int VisibleRows = 7;
+        // The panel fills what the screen actually has. Measured off a real 1920x1080 client:
+        // the panel's own 2260 units drew 1696px, so a unit is 0.75px and the full canvas is
+        // about 2560x1440 - of which the client's nav bar owns the top ~95. PanelDrop pushes the
+        // centred panel below it, because Center() is symmetrical and would otherwise put the
+        // title under the nav.
+        private const float PanelW = 2480f, PanelH = 1290f, PanelDrop = -32f;
+        private const float RowW = 2320f, RowH = 92f, RowGap = 6f;
 
-        // Derived, not guessed: each strip sits directly below the thing above it, so changing
-        // the row count cannot silently reintroduce an overlap.
-        private const float PinnedTop = BodyTop + VisibleRows * (RowH + RowGap) + 8f;
-        private const float PagingTop = PinnedTop + RowH + 16f;
-        private const float BodyTop = 212f;
+        // Every column below was placed for a 2100-wide row. Rather than retype them, the
+        // right-hand group moves by exactly the extra width and the middle takes a share, so a
+        // wider row widens the gaps evenly instead of stranding the numbers mid-row.
+        private const float Shift = RowW - 2100f;
+
+        // The podium takes the top three out of the list and shows them properly, so the page
+        // still holds seven players - three on the podium and four in the list beneath it.
+        private const float PodiumTop = 132f, PodiumH = 460f;
+        private const int PodiumPlaces = 3;
+
+        // The headings are placed by their TOP edge, so the rows have to clear the whole 40 of
+        // them plus a gap - measuring from the heading's top put the first row through the
+        // middle of them.
+        private const float HeadH = 40f;
+        private const float HeadTop = PodiumTop + PodiumH + 20f;
+        private const float BodyTop = HeadTop + HeadH + 12f;
+
+        // Derived BOTTOM-UP from the footer rule, so the row count is whatever actually fits
+        // rather than a number counted once by hand. The strip used to be drawn through the
+        // pinned row when the count and the arithmetic disagreed; now they cannot.
+        private const float FootRuleTop = PanelH - 108f;              // 1132
+        private const float PagingH = 52f;
+        private const float PagingTop = FootRuleTop - 16f - PagingH;
+        private const float PinnedTop = PagingTop - 16f - RowH;
+        private const float RowsSpace = PinnedTop - 8f - BodyTop;
+        private const int VisibleRows = (int)((RowsSpace + RowGap) / (RowH + RowGap));
 
         private bool _built;
-        private Transform _body;
+        private Transform _body, _podium;
+        private readonly List<GameObject> _podiumArt = new List<GameObject>();
         private RectTransform _pinned;
         private TextMeshProUGUI _subtitle, _foot, _status, _empty;
         private readonly List<GameObject> _rows = new List<GameObject>();
@@ -101,7 +138,7 @@ namespace PrizeTracker.Core
 
             var root = (RectTransform)transform;
             var panel = Img("Panel", root, GameArt.Sprite("btn_Oct_20"), Color.white);
-            Center(panel, PanelW, PanelH, 0, 0);
+            Center(panel, PanelW, PanelH, 0, PanelDrop);
 
             var title = GameArt.Label("Text_Bold", panel, "COMMUNITY LEADERBOARD", 50, Ink,
                                       TextAlignmentOptions.MidlineLeft);
@@ -113,16 +150,22 @@ namespace PrizeTracker.Core
             var rule = Img("Rule", panel, null, Hairline);
             NativeHistoryScreen.Place(rule, 0.5f, 1, 0.5f, 1, 0, -122, RowW, 2);
 
+            var podium = new GameObject("Podium", typeof(RectTransform));
+            podium.transform.SetParent(panel, false);
+            NativeHistoryScreen.Place((RectTransform)podium.transform, 0.5f, 1, 0.5f, 1, 0,
+                                      -PodiumTop, RowW, PodiumH);
+            _podium = podium.transform;
+
             // Column headings, in the row's own coordinates.
             var head = new GameObject("Head", typeof(RectTransform));
             head.transform.SetParent(panel, false);
-            NativeHistoryScreen.Place((RectTransform)head.transform, 0.5f, 1, 0.5f, 1, 0, -136, RowW, 40);
+            NativeHistoryScreen.Place((RectTransform)head.transform, 0.5f, 1, 0.5f, 1, 0, -HeadTop, RowW, HeadH);
             Col(head.transform, "#", 30, 70, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "PLAYER", 215, 600, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "LEAGUE", 820, 300, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "ELO", 1150, 200, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "RECORD", 1390, 220, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "WIN %", 1630, 130, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "PLAYER", 215, 600 + Shift * 0.3f, TextAlignmentOptions.MidlineLeft);
+            Col(head.transform, "LEAGUE", 820 + Shift * 0.3f, 300, TextAlignmentOptions.MidlineLeft);
+            Col(head.transform, "ELO", 1150 + Shift, 200, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "RECORD", 1390 + Shift, 220, TextAlignmentOptions.MidlineRight);
+            Col(head.transform, "WIN %", 1630 + Shift, 130, TextAlignmentOptions.MidlineRight);
 
             var body = new GameObject("Body", typeof(RectTransform));
             body.transform.SetParent(panel, false);
@@ -150,10 +193,12 @@ namespace PrizeTracker.Core
             _pageNext = PageButton(panel, "NEXT", 230, () => { if (_pager.Move(+1, Total())) Populate(); });
         }
 
+        /// <summary>How many players the LIST pages over - the board minus the podium.</summary>
         private int Total()
         {
             var st = Board != null ? Board.State : null;
-            return st != null ? st.Players.Count : 0;
+            if (st == null) return 0;
+            return Mathf.Max(0, st.Players.Count - Mathf.Min(PodiumPlaces, st.Players.Count));
         }
 
         private TextMeshProUGUI PageButton(Transform panel, string text, float x, Action onClick)
@@ -197,6 +242,8 @@ namespace PrizeTracker.Core
             Build();
             foreach (var r in _rows) if (r != null) UnityEngine.Object.Destroy(r);
             _rows.Clear();
+            foreach (var a in _podiumArt) if (a != null) UnityEngine.Object.Destroy(a);
+            _podiumArt.Clear();
             if (_pinned != null) { UnityEngine.Object.Destroy(_pinned.gameObject); _pinned = null; }
             _pending.Clear();
 
@@ -221,11 +268,22 @@ namespace PrizeTracker.Core
             string myId = Board != null ? Board.PlayerId : "";
             float y = 0f;
             bool meShown = false;
-            int total = st.Players.Count;
+
+            // The top three come out of the list and onto the podium, so nobody is shown twice.
+            int places = Mathf.Min(PodiumPlaces, st.Players.Count);
+            for (int i = 0; i < places; i++)
+            {
+                var p = st.Players[i];
+                bool me = !string.IsNullOrEmpty(myId) && p.PlayerId == myId;
+                meShown |= me;
+                Plinth(p, i, me);
+            }
+
+            int total = Mathf.Max(0, st.Players.Count - places);
             int start = _pager.Start(total), shown = _pager.Count(total);
             for (int i = start; i < start + shown; i++)
             {
-                var p = st.Players[i];
+                var p = st.Players[places + i];
                 bool me = !string.IsNullOrEmpty(myId) && p.PlayerId == myId;
                 meShown |= me;
                 Row(_body, p, y, me, i % 2 == 0 ? RowA : RowB);
@@ -247,6 +305,97 @@ namespace PrizeTracker.Core
             }
 
             UpdateStatus();
+        }
+
+        /// <summary>
+        /// One place on the podium: a plinth carrying the position and the rating, the player
+        /// standing on it, and their name above.
+        ///
+        /// Laid out bottom-up from the plinth's base, because that is the one edge all three
+        /// columns share - first place is simply a taller block, and everything above it rides up
+        /// with it rather than being positioned separately per place.
+        ///
+        /// The likeness is whatever we captured the last time we watched that player's game, so a
+        /// stranger has none: an avatar is a 3D model the client renders live, not a picture, and
+        /// there is nothing to draw for someone whose match we never saw. That case gets their
+        /// initial on the medal colour, which reads as deliberate rather than broken.
+        /// </summary>
+        private void Plinth(BoardRow p, int place, bool me)
+        {
+            if (_podium == null || place < 0 || place >= PodiumPlaces) return;
+
+            // Second, first, third - left to right. First place stands in the middle and highest,
+            // which is the whole reason a podium reads as a ranking without being labelled.
+            const float ColW = 480f;
+            float[] xs = { 0f, -ColW, ColW };        // the blocks touch, so it reads as one podium
+            // Taller blocks, slightly shorter figures: the numeral and the rating both have to
+            // sit INSIDE the block, clear of the figure standing on it. Sized so that first
+            // place's whole column - block, figure, name - still fits the band.
+            float[] hs = { 160f, 122f, 98f };
+            // Taller than wide: this frames a standing figure, not a headshot.
+            float[] avws = { 250f, 220f, 220f };
+            float[] avhs = { 230f, 205f, 205f };
+
+            float x = xs[place], hp = hs[place];
+            float avw = avws[place], avh = avhs[place];
+            Color medal = Medal[place], dim = MedalDim[place];
+
+            var col = new GameObject("Place" + (place + 1), typeof(RectTransform));
+            col.transform.SetParent(_podium, false);
+            NativeHistoryScreen.Place((RectTransform)col.transform, 0.5f, 0, 0.5f, 0, x, 0, ColW, PodiumH);
+            _podiumArt.Add(col);
+            Transform t = col.transform;
+
+            var block = Img("Block", t, GameArt.Sprite("btn_Oct_16"), medal);
+            NativeHistoryScreen.Place(block, 0.5f, 0, 0.5f, 0, 0, 0, ColW, hp);
+
+            // Both of these are sized and placed as a FRACTION of the block they sit in. At a
+            // fixed 54pt the numeral stood taller than third place's block, overflowed the top of
+            // it, and was then covered by the avatar standing on it - so third place's "3" was
+            // sliced in half.
+            var num = GameArt.Label("Text_Bold", block, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
+                                    Mathf.RoundToInt(Mathf.Clamp(hp * 0.42f, 30f, 54f)),
+                                    Color.white, TextAlignmentOptions.Center);
+            NativeHistoryScreen.Place(num.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp * 0.58f, 200, hp * 0.40f);
+
+            var elo = GameArt.Label("Text_Medium", block, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
+                                    28, new Color(1f, 1f, 1f, 0.88f), TextAlignmentOptions.Center);
+            NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp * 0.20f, 300, hp * 0.28f);
+
+            // Seated ON the block, not hovering over it - a couple of units of overlap is what
+            // makes them read as standing on the podium rather than floating above it.
+            var ring = Img("Ring", t, GameArt.Sprite("btn_Oct_16"), medal);
+            NativeHistoryScreen.Place(ring, 0.5f, 0, 0.5f, 0, 0, hp - 2, avw + 12, avh + 12);
+
+            var plate = Img("Plate", ring, GameArt.Sprite("btn_Oct_16"), dim);
+            NativeHistoryScreen.Place(plate, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, avw, avh);
+
+            var tex = Avatars.ForPlayer(History, p.DisplayName, me);
+            if (tex != null)
+            {
+                var face = new GameObject("Face", typeof(RectTransform), typeof(RawImage));
+                face.transform.SetParent(plate, false);
+                var raw = face.GetComponent<RawImage>();
+                raw.texture = tex;
+                raw.raycastTarget = false;
+                NativeHistoryScreen.Place((RectTransform)face.transform, 0.5f, 0.5f, 0.5f, 0.5f,
+                                          0, 0, avw - 8, avh - 8);
+            }
+            else
+            {
+                string initial = string.IsNullOrEmpty(p.DisplayName)
+                    ? "?" : p.DisplayName.Substring(0, 1).ToUpperInvariant();
+                var ini = GameArt.Label("Text_Bold", plate, initial, 84, medal,
+                                        TextAlignmentOptions.Center);
+                NativeHistoryScreen.Stretch(ini.rectTransform);
+            }
+
+            var name = GameArt.Label("Text_Medium", t, "", 34, me ? Accent : Ink,
+                                     TextAlignmentOptions.Center);
+            name.richText = true;
+            name.text = Esc(p.DisplayName) +
+                        (me ? "  <size=20><color=#" + ColorUtility.ToHtmlStringRGB(Accent) + ">YOU</color></size>" : "");
+            NativeHistoryScreen.Place(name.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp + avh + 16, ColW, 44);
         }
 
         private void Row(Transform parent, BoardRow p, float y, bool me, Color bg)
@@ -273,29 +422,29 @@ namespace PrizeTracker.Core
             name.richText = true;
             name.text = Esc(p.DisplayName) +
                         (me ? "  <size=22><color=#" + ColorUtility.ToHtmlStringRGB(Accent) + ">YOU</color></size>" : "");
-            NativeHistoryScreen.Place(name.rectTransform, 0, 0.5f, 0, 0.5f, 215, 0, 600, 44);
+            NativeHistoryScreen.Place(name.rectTransform, 0, 0.5f, 0, 0.5f, 215, 0, 600 + Shift * 0.3f, 44);
 
             var league = GameArt.Label("Text_Regular", row, LeagueTitle(p.Exp), 28, InkDim,
                                        TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 820, 0, 300, 44);
+            NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 820 + Shift * 0.3f, 0, 300, 44);
 
             // ELO alone. Everyone on this board is in Master, where exp has stopped separating
             // players - one rank spans 550 to 15000 - so it is the only number left that ranks.
             var rating = GameArt.Label("Text_Medium", row, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
                                        32, Ink, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, 1150, 0, 200, 44);
+            NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, 1150 + Shift, 0, 200, 44);
 
             // "120-60": 120 wins, 60 losses - the matches played, as a record.
             var rec = GameArt.Label("Text_Medium", row, p.Record, 32, Ink, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, 1390, 0, 220, 44);
+            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, 1390 + Shift, 0, 220, 44);
 
             int played = p.Wins + p.Losses;
             string pct = played > 0 ? Mathf.RoundToInt(100f * p.Wins / played) + "%" : "-";
             var wr = GameArt.Label("Text_Regular", row, pct, 30, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, 1630, 0, 130, 44);
+            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, 1630 + Shift, 0, 130, 44);
 
             // Flags are the board's honesty: they are shown, never hidden, and never block.
-            float fx = 1790f;
+            float fx = 1790f + Shift;
             foreach (var f in p.Flags)
             {
                 var label = FlagText(f);

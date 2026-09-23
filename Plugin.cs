@@ -147,6 +147,7 @@ namespace PrizeTracker
                 var s = go.AddComponent<NativeLeaderboardScreen>();
                 s.Board = board;
                 s.Season = season;
+                s.History = history;   // the podium's avatars come from matches we watched
                 return s;
             };
 

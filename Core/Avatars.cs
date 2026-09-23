@@ -50,6 +50,40 @@ namespace PrizeTracker.Core
             return m == null ? null : "m" + m.WhenUtc.Ticks + "-" + who;
         }
 
+        /// <summary>
+        /// The most recent likeness we hold of a named player, or null if we have never seen them.
+        ///
+        /// An avatar is a 3D model the client renders into a RenderTexture, so there is nothing to
+        /// draw for a player whose game we have not watched - see the note at the top of this
+        /// file. That makes this a lookup over matches we have actually played: our own face comes
+        /// from the newest match, anyone else's from the newest match against them. Callers are
+        /// expected to have something to show when it returns null.
+        /// </summary>
+        public static Texture2D ForPlayer(MatchHistory history, string screenName, bool isMe)
+        {
+            if (history == null) return null;
+            var records = history.Records;
+            if (records == null) return null;
+
+            MatchRecord best = null;
+            for (int i = 0; i < records.Count; i++)
+            {
+                var m = records[i];
+                if (m == null) continue;
+                if (!isMe)
+                {
+                    if (string.IsNullOrEmpty(screenName) || string.IsNullOrEmpty(m.Opponent)) continue;
+                    if (!m.Opponent.Equals(screenName, StringComparison.OrdinalIgnoreCase)) continue;
+                }
+                if (best == null || m.WhenUtc > best.WhenUtc) best = m;
+            }
+            if (best == null) return null;
+
+            // Newest first is only the usual order, not a guarantee, so the newest match wins on
+            // its timestamp rather than on its position in the list.
+            return Get(Key(best, isMe ? "me" : "opp"));
+        }
+
         public static Texture2D Get(string key)
         {
             if (string.IsNullOrEmpty(key) || _missing.Contains(key)) return null;
