@@ -1,14 +1,5 @@
 # Installing PTCGL Leaderboard & Match History
 
-Adds two screens to Pokémon TCG Live: a **Match History** of every game you play, and a community
-**Leaderboard** for the current ranked season. It only works in the menus. It shows nothing and
-changes nothing during a match.
-
-**You need:** Windows 10 or 11, with Pokémon TCG Live installed from the official website. No admin
-rights are needed. Install takes about a minute.
-
----
-
 ## Will I get banned for using this?
 
 **Most likely no.** Nobody can promise it, but here's why the risk is low.
