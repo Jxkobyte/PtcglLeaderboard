@@ -72,6 +72,13 @@ namespace PrizeTracker.Core
         public const float BlockWidth = 1.9f;
 
         /// <summary>
+        /// How deep a block is, front to back. Shallow on purpose: the camera sits above these,
+        /// so the deeper the block the more of its TOP face is in view, and the top face eats the
+        /// front face - which is the one carrying the position numeral.
+        /// </summary>
+        private const float BlockDepth = 0.7f;
+
+        /// <summary>
         /// About how tall the framed figure is, head to foot plus that headroom, in world units.
         /// The podium screen needs the same number to work out where the block ends up inside the
         /// picture, and one shared constant is better than the same 2-ish typed in two places.
@@ -89,6 +96,7 @@ namespace PrizeTracker.Core
             public RenderTexture OriginalTarget;
             public RenderTexture Ours;
             public GameObject Block;
+
         }
 
         private static readonly Borrowed[] _held = new Borrowed[Places];
@@ -235,6 +243,7 @@ namespace PrizeTracker.Core
 
             foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
 
+
             // Hold the framing. Setting it once is not enough for first place: that is the
             // PLAYER group, which the client drives for its own profile screen and re-frames
             // whenever it feels like it - opening Settings is enough. The result was first
@@ -355,7 +364,20 @@ namespace PrizeTracker.Core
                                          ctrl.transform.position.z);
                 float feet = ground.y;
                 float head = feet + FigureHeight;
-                held.Block = MakeBlock(layer, ground, feet, blockH, blockColour);
+                // Which side the camera looks from, kept as it was: the professor's camera faces
+                // the other way (probed: y rotation 180) and moving it to the near side would put
+                // the figure behind it.
+                float side = Mathf.Abs(Mathf.DeltaAngle(cam.transform.eulerAngles.y, 0f)) < 90f ? -1f : 1f;
+
+                // The block is pushed AWAY from the camera by half its depth, so the figure ends
+                // up standing on the front edge of the top face rather than in the middle of it.
+                // Centred, the block's front-top edge sits nearer the camera than the feet do and
+                // therefore lower on screen - which read as the figure standing in a recess cut
+                // into the podium.
+                var blockAt = new Vector3(ground.x, ground.y, ground.z - side * BlockDepth * 0.5f);
+                SweepStaleBlocks(layer);
+                held.Block = MakeBlock(layer, blockAt, feet, blockH, blockColour);
+
 
                 // Frame the block AND the figure. Visible height at a perspective camera is
                 // 2 * distance * tan(fov / 2), so the distance follows from how much has to fit -
@@ -376,10 +398,6 @@ namespace PrizeTracker.Core
                 cam.fieldOfView = Fov;
                 float dist = (top - bottom) / (2f * Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad));
 
-                // Which side the camera looks from, kept as it was: the professor's camera faces
-                // the other way (probed: y rotation 180) and moving it to the near side would put
-                // the figure behind it.
-                float side = Mathf.Abs(Mathf.DeltaAngle(cam.transform.eulerAngles.y, 0f)) < 90f ? -1f : 1f;
                 held.Framed = new Vector3(ground.x, (top + bottom) * 0.5f, ground.z + side * dist);
                 held.Fov = Fov;
                 cam.transform.position = held.Framed;
@@ -440,7 +458,7 @@ namespace PrizeTracker.Core
             // frame it has to fit inside is correspondingly narrower at that depth. At 2.2 that
             // left roughly 13 units of margin and the top-front corner was being cut off at the
             // edge of the render texture.
-            cube.transform.localScale = new Vector3(BlockWidth, h, 0.7f);
+            cube.transform.localScale = new Vector3(BlockWidth, h, BlockDepth);
 
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)
@@ -462,6 +480,31 @@ namespace PrizeTracker.Core
                 mr.receiveShadows = false;
             }
             return cube;
+        }
+
+        /// <summary>
+        /// Destroy any block of ours already on this layer.
+        ///
+        /// This is what was actually wrong with the podiums, found by listing everything the
+        /// cameras could see: NINE of our own blocks piled up at the professor's feet, one from
+        /// every previous open of the screen. Give() destroys the block it is holding, but a hot
+        /// reload resets the statics that hold it, so every reload orphaned the blocks in the
+        /// scene and the next open built new ones on top. Stacked cubes at slightly different
+        /// heights read as a stepped second top face and a lip along the front, and the picture
+        /// changed with every reload as one more went on the pile. Blocks are the only thing we
+        /// ever name PodiumBlock, so sweeping by name is safe and survives a reload.
+        /// </summary>
+        private static void SweepStaleBlocks(int layer)
+        {
+            int swept = 0;
+            foreach (var mr in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+            {
+                if (mr == null || mr.gameObject.layer != layer) continue;
+                if (mr.gameObject.name != "PodiumBlock") continue;
+                UnityEngine.Object.Destroy(mr.gameObject);
+                swept++;
+            }
+            if (swept > 0) Plugin.Log.LogInfo("podium: swept " + swept + " leftover block(s) on layer " + layer);
         }
 
         /// <summary>Give one place's camera back, and destroy the block we put in front of it.</summary>
@@ -493,6 +536,13 @@ namespace PrizeTracker.Core
         public static void Release(MonoBehaviour host)
         {
             for (int i = 0; i < Places; i++) Give(i);
+
+            // Belt and braces: whatever Give() could not reach - a block orphaned by a hot
+            // reload - must not be left standing in the avatar scene for the profile screen to
+            // find. Every block of ours has the one name, on any layer.
+            foreach (var mr in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
+                if (mr != null && mr.gameObject.name == "PodiumBlock")
+                    UnityEngine.Object.Destroy(mr.gameObject);
 
             var ctrl = Controller(0);
             if (host == null || ctrl == null) return;
