@@ -193,10 +193,26 @@ namespace PrizeTracker.Core
         private static readonly Color WinTint = new Color(0.176f, 0.408f, 0.847f, 0.17f);
         private static readonly Color LossTint = new Color(0.820f, 0.133f, 0.149f, 0.16f);
         private static readonly Color Slate = new Color(0.227f, 0.247f, 0.278f, 1f);
+
+        // The end-of-match ADD FRIEND button, measured off the client's own results screen: a
+        // near-black plate with a slightly lighter band across the top half and near-white text.
+        private static readonly Color Charcoal = new Color(0.145f, 0.145f, 0.145f, 1f);   // 37,37,37
+        private static readonly Color CharcoalTop = new Color(0.192f, 0.192f, 0.192f, 1f); // 49,49,49
+        private static readonly Color OnCharcoal = new Color(0.925f, 0.925f, 0.925f, 1f);  // 236,236,236
         private static readonly Color Hairline = new Color(0f, 0f, 0f, 0.10f);
 
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 130f, RowGap = 8f;
+
+        // ADD FRIEND sits immediately left of the opponent's portrait, so the button reads as
+        // belonging to that person rather than to the row's trailing button group. The portrait is
+        // centred at x=800 and RowH-8 wide, so it spans 739..861 - the button's right edge stops
+        // short of that, and our own deck text is narrowed to stop short of the button.
+        private const float AvatarCx = 800f, AvatarSize = RowH - 8f;
+        private const float AddW = 218f;
+        private const float AddRight = AvatarCx - AvatarSize / 2f - 10f;   // 511..729
+        private const float HeadW = AddRight - AddW - 130f - 18f;          // 130..493
+        private const float WhenW = 190f;
 
         // The rows area is 1040 tall and a row occupies 138 with its gap, so seven fit. The eighth
         // would overhang the panel, which is what the paging strip below exists to avoid.
@@ -336,29 +352,28 @@ namespace PrizeTracker.Core
             head.richText = true;
             head.text = "<color=#" + ColorUtility.ToHtmlStringRGB(accent) + "><b>" +
                         (m.Won ? "WIN" : "LOSS") + "</b></color>   " + Esc(m.MyDeck);
-            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, 130, 18, 620, 44);
+            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, 130, 18, HeadW, 44);
 
             var meta = GameArt.Label("Text_Regular", row, Meta(m), 26, InkDim,
                                      TextAlignmentOptions.MidlineLeft);
-            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, 130, -22, 620, 36);
+            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, 130, -22, HeadW, 36);
 
             // Opponent avatar: same circular framing as before, at full row height.
-            Art(row, AvatarKey(m), 800, 0, RowH - 8f, RowH - 8f, false, true);
+            Art(row, AvatarKey(m), AvatarCx, 0, AvatarSize, AvatarSize, false, true);
 
             // The right-hand side of a row, laid out as one strip so the pieces cannot run into
             // each other. Buttons are placed by their RIGHT edge (pivot 1), the opponent block by
             // its left, and the timestamp sits in the gap between them. The timestamp previously
             // ended at 1478 while ADD FRIEND began at 1470, so "just now" was drawn under it.
             const float rowRight = RowW - 20f;                 // 2080
-            const float logW = 170f, deckW = 190f, addW = 210f, btnGap = 18f;
+            const float logW = 170f, deckW = 190f, btnGap = 18f;
             const float logRight = rowRight;                   // 1910..2080
             const float deckRight = logRight - logW - btnGap;   // 1702..1892
-            const float addRight = deckRight - deckW - btnGap;  // 1474..1684
-            // addRight is the button's RIGHT edge, so its left edge is addRight - addW. Measuring
-            // the gap from the right edge put the timestamp inside the button, which is why it
-            // disappeared entirely rather than merely overlapping.
-            const float whenRight = addRight - addW - 24f;      // 1260..1450
-            const float oppW = whenRight - 190f - 896f - 20f;   // opponent block, clear of the time
+            // The timestamp is placed by its RIGHT edge, and the gap has to be measured from the
+            // NEXT thing's LEFT edge. Measuring it from VIEW DECK's right edge once put the
+            // timestamp inside the button, so it disappeared entirely rather than overlapping.
+            const float whenRight = deckRight - deckW - 24f;    // 1488..1678
+            const float oppW = whenRight - WhenW - 896f - 20f;  // opponent block, clear of the time
 
             var oppName = GameArt.Label("Text_Medium", row,
                                         string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 34, Ink,
@@ -372,7 +387,7 @@ namespace PrizeTracker.Core
 
             var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
                                      TextAlignmentOptions.MidlineRight);
-            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, whenRight, 0, 190, 40);
+            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, whenRight, 0, WhenW, 40);
 
             // ADD FRIEND, the same request the client's own end-of-match button sends.
             //
@@ -386,8 +401,8 @@ namespace PrizeTracker.Core
                          !m.Opponent.Equals("AI", StringComparison.OrdinalIgnoreCase);
             bool friends = named && Friends.AlreadyFriends(m.Opponent);
             TextMeshProUGUI addLabel = null;
-            addLabel = Button(row, friends ? "FRIENDS" : "ADD FRIEND", addRight, addW, false,
-                              named && !friends, () =>
+            addLabel = FriendButton(row, friends ? "FRIENDS" : "ADD FRIEND", AddRight, AddW,
+                                    named && !friends, () =>
             {
                 // Explicit click only. This sends a real message to a real player.
                 Friends.Send(m.Opponent, (ok, why) =>
@@ -536,6 +551,50 @@ namespace PrizeTracker.Core
                 plate.SetAsFirstSibling();
             }
             return hrt;
+        }
+
+        /// <summary>
+        /// ADD FRIEND, built to match the button the client puts on its own end-of-match screen:
+        /// a near-black plate with a lighter band across the top, the client's own icn_addfriend
+        /// icon, and near-white upright text.
+        ///
+        /// It uses the client's icon sprite rather than a drawn one. The results-screen prefab is
+        /// only in memory during a match, so the button itself could not be read directly - but
+        /// its icon is an atlas sprite the rest of the UI shares, so the real thing was available
+        /// all along once the sprite table was searched for it instead of the prefab.
+        /// </summary>
+        private TextMeshProUGUI FriendButton(Transform row, string text, float x, float w,
+                                             bool enabled, Action onClick)
+        {
+            var plate = !enabled ? new Color(0.45f, 0.45f, 0.47f, 1f) : Charcoal;
+            var btn = Img("Btn", row, GameArt.Sprite("btn_Oct_16"), plate);
+            Place(btn, 0, 0.5f, 1, 0.5f, x, 0, w, 58);
+
+            // The lighter top band. It is inset by a couple of pixels so the plate's own rounded
+            // edge still reads as the outline, rather than the band squaring off the corners.
+            var top = Img("Top", btn, GameArt.Sprite("btn_Oct_16"),
+                          enabled ? CharcoalTop : new Color(0.52f, 0.52f, 0.54f, 1f));
+            Place(top, 0.5f, 1, 0.5f, 1, 0, -3, w - 6, 26);
+
+            var icon = Img("Icon", btn, GameArt.Sprite("icn_addfriend"),
+                           new Color(1f, 1f, 1f, enabled ? 1f : 0.55f));
+            Place(icon, 0, 0.5f, 0, 0.5f, 26, 0, 32, 32);
+
+            // The text is centred on the space LEFT of the icon, not on the whole plate, so it
+            // does not drift under the icon on the narrower "FRIENDS" and "SENT!" states.
+            var label = GameArt.Label("Text_Medium", btn, text,
+                                      new Color(OnCharcoal.r, OnCharcoal.g, OnCharcoal.b, enabled ? 1f : 0.7f),
+                                      TextAlignmentOptions.Center, 26);
+            Place(label.rectTransform, 0, 0.5f, 0.5f, 0.5f, 46 + (w - 46) / 2f, 0, w - 46, 40);
+            label.transform.SetAsLastSibling();
+
+            if (!enabled || onClick == null) return label;
+            var b = btn.gameObject.AddComponent<Button>();
+            var g = btn.GetComponent<Image>();
+            g.raycastTarget = true;
+            b.targetGraphic = g;
+            b.onClick.AddListener(() => onClick());
+            return label;
         }
 
         private TextMeshProUGUI Button(Transform row, string text, float x, float w, bool solid,
@@ -881,8 +940,8 @@ namespace PrizeTracker.Core
     internal static class GameArt
     {
         private static Dictionary<string, Sprite> _sprites;
-        private static readonly Dictionary<string, TextMeshProUGUI> _fontSamples =
-            new Dictionary<string, TextMeshProUGUI>();
+        private static readonly Dictionary<string, TMP_FontAsset> _fonts =
+            new Dictionary<string, TMP_FontAsset>();
         private static Sprite _hex;
 
         public static Sprite Sprite(string name)
@@ -941,92 +1000,88 @@ namespace PrizeTracker.Core
             return v <= 1f - u / 0.866f * 0.5f;
         }
 
-        private static TextMeshProUGUI Sample(string fontName)
+        /// <summary>
+        /// The font asset behind a name.
+        ///
+        /// A TMP_FontAsset is a shared asset, not a scene object, so nothing about the screen it
+        /// happens to be used on can come along with it - which is the whole point of resolving a
+        /// FONT rather than an example LABEL. Falls back to reading the font off a label only when
+        /// the asset table does not have it loaded.
+        /// </summary>
+        private static TMP_FontAsset Font(string fontName)
         {
-            TextMeshProUGUI cached;
-            if (_fontSamples.TryGetValue(fontName, out cached) && cached != null) return cached;
+            TMP_FontAsset cached;
+            if (_fonts.TryGetValue(fontName, out cached) && cached != null) return cached;
 
-            TextMeshProUGUI any = null;
+            TMP_FontAsset any = null;
+            foreach (var f in Resources.FindObjectsOfTypeAll<TMP_FontAsset>())
+            {
+                if (f == null || f.material == null) continue;
+                if (any == null) any = f;
+                if (f.name != fontName) continue;
+                _fonts[fontName] = f;
+                return f;
+            }
+
             foreach (var l in Resources.FindObjectsOfTypeAll<TextMeshProUGUI>())
             {
-                if (l == null || l.font == null || l.canvas == null) continue;
-                // Prefer a sample that is switched ON and on screen. A clone copies the source's
-                // enabled state, so cloning a disabled label yields one that renders nothing while
-                // every property reads correct. The clone forces enabled anyway, but starting from
-                // a live label also gets a material and case style that are actually in use.
-                if (!l.enabled || !l.gameObject.activeInHierarchy) continue;
-                if (l.canvasRenderer != null && l.canvasRenderer.GetAlpha() < 0.99f) continue;
-                if (any == null) any = l;
+                if (l == null || l.font == null) continue;
+                if (any == null) any = l.font;
                 if (l.font.name != fontName) continue;
-                _fontSamples[fontName] = l;
-                Plugin.Log.LogInfo("game art: font \"" + fontName + "\" cloned from " + l.name +
-                                   " (material \"" + (l.fontSharedMaterial != null
-                                       ? l.fontSharedMaterial.name : "none") + "\").");
-                return l;
+                _fonts[fontName] = l.font;
+                return l.font;
             }
-            if (any != null) Plugin.Log.LogWarning("game art: font \"" + fontName + "\" not in use; " +
-                                                  "falling back to \"" + any.font.name + "\".");
-            _fontSamples[fontName] = any;
+
+            if (any != null)
+                Plugin.Log.LogWarning("game art: font \"" + fontName + "\" not found; using \"" +
+                                      any.name + "\".");
+            _fonts[fontName] = any;
             return any;
         }
 
+        /// <summary>
+        /// A label, built from nothing.
+        ///
+        /// This used to clone a label found in the client's own UI, on the reasoning that a clone
+        /// would inherit a correct setup for free. It inherits everything else too, and the state
+        /// that hides a label does not show up in any property worth printing: three separate
+        /// rounds of diagnostics reported text, colour, material, font, size, rect, scale, TMP
+        /// alpha, enabled and activeInHierarchy all perfectly correct on labels that rendered
+        /// nothing, because the source was switched off, inside a stencil mask, inside a
+        /// CanvasGroup, or carrying a zero CanvasRenderer alpha - a different one each session,
+        /// depending on which label the scan happened to reach first. Every fix was a real bug and
+        /// none of them was the last one.
+        ///
+        /// Building the component fresh ends that class of bug outright rather than one member of
+        /// it at a time. The only thing taken from the client is the font asset and its own
+        /// material, neither of which carries scene state.
+        /// </summary>
         public static TextMeshProUGUI Label(string fontName, Transform parent, string text, int size,
                                             Color color, TextAlignmentOptions align)
         {
-            var src = Sample(fontName);
-            if (src == null) throw new InvalidOperationException("no TextMeshPro label to clone");
+            var go = new GameObject("Label", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
 
-            var go = UnityEngine.Object.Instantiate(src.gameObject, parent);
-            go.name = "Label";
-            go.SetActive(true);
+            var lbl = go.AddComponent<TextMeshProUGUI>();
 
-            // A cloned label drags along whatever drove it in its old home - a localiser that would
-            // rewrite the text, and layout components a parent would honour and move it.
-            foreach (var c in go.GetComponents<MonoBehaviour>())
-                if (c != null && !(c is TextMeshProUGUI)) UnityEngine.Object.Destroy(c);
-            foreach (var child in go.GetComponentsInChildren<Transform>(true))
-                if (child != go.transform) UnityEngine.Object.Destroy(child.gameObject);
-
-            var lbl = go.GetComponent<TextMeshProUGUI>();
-
-            // Reset to the font asset's OWN material.
-            //
-            // A label that lives inside a mask carries a stencil-modified material, and cloning it
-            // brings that stencil along. In an unmasked canvas the stencil test never passes and
-            // the label renders nothing at all - which is exactly how every Text_Medium label
-            // vanished while Text_Bold and Text_Regular were fine: the sample happened to sit
-            // inside a masked region.
-            if (lbl.font != null) lbl.fontSharedMaterial = lbl.font.material;
-
-            // Undo everything the SOURCE happened to be wearing.
-            //
-            // The sample is whatever label with this font was found, and it may be switched off,
-            // faded out, or inside a CanvasGroup that is. A clone inherits all of it, and the
-            // result renders nothing while text, colour, material, TMP alpha and position all read
-            // perfectly correct - which is how first "WIN"/"LOSS" and then the grey second line
-            // vanished in turn, depending on which sample got picked that session.
-            //
-            // CanvasRenderer alpha is the one that does not show up in any TMP property: a label
-            // in a faded panel carries alpha 0 on its renderer. CanvasGroup is missed by the
-            // component strip below because it is not a MonoBehaviour.
-            lbl.enabled = true;
-            foreach (var cg in go.GetComponents<CanvasGroup>()) UnityEngine.Object.Destroy(cg);
-            if (lbl.canvasRenderer != null) lbl.canvasRenderer.SetAlpha(1f);
+            var font = Font(fontName);
+            if (font != null)
+            {
+                lbl.font = font;
+                lbl.fontSharedMaterial = font.material;
+            }
 
             lbl.text = text;
             lbl.fontSize = size;
             lbl.color = color;
             lbl.alignment = align;
+            lbl.enableAutoSizing = false;
             lbl.enableWordWrapping = false;
             lbl.overflowMode = TextOverflowModes.Ellipsis;
+            lbl.richText = true;
             lbl.raycastTarget = false;
+            lbl.margin = Vector4.zero;
             lbl.rectTransform.localScale = Vector3.one;
-
-            // Clear any case transform the source label happened to carry. Without this a cloned
-            // label silently UPPERCASED whatever we set - so "3 - 6 prizes" rendered as
-            // "3 - 6 PRIZES" while a label cloned from a different source stayed mixed case, which
-            // reads as two different design decisions rather than one inherited accident.
-            lbl.fontStyle &= ~(FontStyles.UpperCase | FontStyles.LowerCase | FontStyles.SmallCaps);
             return lbl;
         }
 

@@ -22,6 +22,11 @@ namespace PrizeTracker.Core
     {
         private static readonly Regex CardTex = new Regex(@"^[a-z0-9\-]+_[a-z]{2}_\d+", RegexOptions.IgnoreCase);
 
+        // Deck customisation items: sleeves (cs_*), deck boxes (db_*) and coins, as the client's
+        // own deck tile draws them. Same question as cards - is the square texture squashed, or
+        // padded? - and the same way of settling it: read the rect the client uses.
+        private static readonly Regex ItemTex = new Regex(@"^(cs|db|co)[_-]", RegexOptions.IgnoreCase);
+
         private float _next;
         private int _reports;
 
@@ -40,7 +45,10 @@ namespace PrizeTracker.Core
             foreach (var raw in Resources.FindObjectsOfTypeAll<RawImage>())
             {
                 if (raw == null || !raw.gameObject.activeInHierarchy) continue;
-                if (raw.texture == null || !CardTex.IsMatch(raw.texture.name)) continue;
+                if (raw.texture == null) continue;
+                bool isCard = CardTex.IsMatch(raw.texture.name);
+                bool isItem = ItemTex.IsMatch(raw.texture.name);
+                if (!isCard && !isItem) continue;
 
                 var rt = raw.rectTransform;
                 float w = rt.rect.width, h = rt.rect.height;

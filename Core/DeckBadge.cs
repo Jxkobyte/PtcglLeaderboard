@@ -56,6 +56,37 @@ namespace PrizeTracker.Core
             }
         }
 
+        /// <summary>
+        /// Re-apply the badge to every deck tile currently on screen.
+        ///
+        /// The Harmony patch only fires when the client binds a tile to a deck, so tiles already
+        /// built keep whatever they were last given. After a hot reload that means the PREVIOUS
+        /// build's badges stay on screen - which looked exactly like a change not taking effect,
+        /// because the labels survive the reload while the code that wrote them does not.
+        /// </summary>
+        public static int RefreshExisting()
+        {
+            int n = 0;
+            try
+            {
+                foreach (var entry in Resources.FindObjectsOfTypeAll<DeckSelectEntry>())
+                {
+                    if (entry == null || !entry.gameObject.activeInHierarchy) continue;
+                    Apply(entry);
+                    n++;
+                }
+            }
+            catch (Exception e)
+            {
+                if (!_loggedFailure)
+                {
+                    _loggedFailure = true;
+                    Plugin.Log.LogWarning("deck badge refresh failed: " + e.Message);
+                }
+            }
+            return n;
+        }
+
         public static void Apply(DeckSelectEntry entry)
         {
             if (!Enabled || entry == null || History == null) return;

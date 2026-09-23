@@ -55,8 +55,34 @@ namespace PrizeTracker.Core
             {
                 _done = true;
                 Plugin.Log.LogWarning("add-friend probe: no AddFriendFromMatchResults with a button " +
-                                      "found in 30s - the results screen prefab may only load with a match.");
+                                      "found in 30s - the results screen prefab only loads with a match. " +
+                                      "Listing candidate icon sprites instead.");
+                Icons();
             }
+        }
+
+        /// <summary>
+        /// The sprites that could be the client's friend icon, by name.
+        ///
+        /// The button itself is only in memory while the results screen is, but its ICON is an
+        /// atlas sprite that the rest of the UI also uses, so it can be found without a match.
+        /// This is the difference between drawing an approximation of the icon and using the one
+        /// the client draws.
+        /// </summary>
+        private static void Icons()
+        {
+            var words = new[] { "friend", "social", "addfriend", "add_friend", "person", "player", "invite" };
+            var hits = new List<string>();
+            foreach (var sp in Resources.FindObjectsOfTypeAll<Sprite>())
+            {
+                if (sp == null || string.IsNullOrEmpty(sp.name)) continue;
+                var n = sp.name.ToLowerInvariant();
+                foreach (var w in words)
+                    if (n.Contains(w)) { hits.Add(sp.name + "  " + sp.rect.width + "x" + sp.rect.height); break; }
+            }
+            hits = hits.Distinct().OrderBy(h => h).ToList();
+            Plugin.Log.LogWarning("add-friend probe: " + hits.Count + " candidate icon sprites");
+            foreach (var h in hits) Plugin.Log.LogWarning("  " + h);
         }
 
         private static void Dump(Transform t, int depth)
