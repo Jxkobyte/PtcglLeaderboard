@@ -183,7 +183,10 @@ namespace PrizeTracker.Core
             }
         }
 
-        private const float Blend = 0.35f;
+        // Short. A long blend reads as the figure drifting out of the pose rather than
+        // finishing it, and because the fade starts that far before the animation ends, it also
+        // eats that much of the pose itself.
+        private const float Blend = 0.15f;
         private const float RestSeconds = 3f;
         private static readonly int IdleHash = Animator.StringToHash("idle");
 
