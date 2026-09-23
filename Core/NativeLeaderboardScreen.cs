@@ -24,6 +24,9 @@ namespace PrizeTracker.Core
         public Season Season;
         public MatchHistory History;
 
+        /// <summary>Called when sharing is switched on or off, so the choice is written to disk.</summary>
+        public Action OnSharingChanged;
+
         private static readonly Color Ink = new Color(0.16f, 0.17f, 0.20f, 1f);
         private static readonly Color InkDim = new Color(0.55f, 0.57f, 0.61f, 1f);
         private static readonly Color Accent = new Color(0.176f, 0.408f, 0.847f, 1f);
@@ -158,6 +161,7 @@ namespace PrizeTracker.Core
         private readonly List<GameObject> _podiumArt = new List<GameObject>();
         private RectTransform _pinned;
         private TextMeshProUGUI _subtitle, _foot, _status, _empty;
+        private RectTransform _shareTick;
         private readonly List<GameObject> _rows = new List<GameObject>();
         private BoardState _rendered;
         private float _nextTick;
@@ -249,7 +253,9 @@ namespace PrizeTracker.Core
 
             _subtitle = GameArt.Label("Text_Medium", panel, "", 28, Ink, TextAlignmentOptions.TopRight);
             _subtitle.enableWordWrapping = true;
-            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -76,
+            // Inset a little further than the plaque: right-aligned text reads as crowding the
+            // edge at the same margin a solid image sits comfortably at.
+            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -100,
                                       -(PlaqueTop + PlaqueH + 14f), PlaqueW, 80);
 
             // Built BEFORE the podium so it sits behind it: this canvas draws in sibling order.
@@ -304,14 +310,45 @@ namespace PrizeTracker.Core
             _foot = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineLeft);
             NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 60, 780, 40);
 
-            _status = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 60, 780, 40);
+            // Sharing lives here rather than in the client's Settings screen: it is the one
+            // switch that decides whether anything leaves this machine, and the place to answer
+            // that is the board it would go to.
+            var share = new GameObject("Share", typeof(RectTransform));
+            share.transform.SetParent(panel, false);
+            var shareRect = (RectTransform)share.transform;
+            NativeHistoryScreen.Place(shareRect, 1, 0, 1, 0, -80, 60, 760, 44);
+
+            _status = GameArt.Label("Text_Regular", share.transform, "", 26, InkDim,
+                                    TextAlignmentOptions.MidlineRight);
+            NativeHistoryScreen.Place(_status.rectTransform, 1, 0.5f, 1, 0.5f, -46, 0, 700, 40);
+
+            var box = Img("Box", share.transform, GameArt.Sprite("btn_Oct_16"),
+                          new Color(0.80f, 0.82f, 0.85f, 1f));
+            NativeHistoryScreen.Place(box, 1, 0.5f, 1, 0.5f, 0, 0, 32, 32);
+            var inner = Img("BoxFill", box, GameArt.Sprite("btn_Oct_16"), Color.white);
+            NativeHistoryScreen.Place(inner, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 26, 26);
+            _shareTick = Img("Tick", inner, GameArt.Sprite("btn_Oct_16"), Accent);
+            NativeHistoryScreen.Place(_shareTick, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 16, 16);
+
+            // The whole strip is the hit target, not just the 32-unit box.
+            var hit = share.AddComponent<Image>();
+            hit.color = new Color(0f, 0f, 0f, 0f);
+            hit.raycastTarget = true;
+            var shareBtn = share.AddComponent<Button>();
+            shareBtn.targetGraphic = hit;
+            shareBtn.onClick.AddListener(() =>
+            {
+                if (Board == null) return;
+                Board.Enabled = !Board.Enabled;
+                if (OnSharingChanged != null) OnSharingChanged();
+                UpdateStatus();
+            });
 
 
             _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 1, 0, -PagingTop, 360, 40);
-            _pagePrev = PageButton(panel, "PREV", -230, () => { if (_pager.Move(-1, Total())) Populate(); });
-            _pageNext = PageButton(panel, "NEXT", 230, () => { if (_pager.Move(+1, Total())) Populate(); });
+            _pagePrev = PageButton(panel, "PREV", -190, () => { if (_pager.Move(-1, Total())) Populate(); });
+            _pageNext = PageButton(panel, "NEXT", 190, () => { if (_pager.Move(+1, Total())) Populate(); });
         }
 
         /// <summary>How many players the LIST pages over - the board minus the podium.</summary>
@@ -776,14 +813,20 @@ namespace PrizeTracker.Core
             else _foot.text = "Master league, ranked by ELO";
 
             if (Board == null) { _status.text = ""; return; }
-            if (!Board.Enabled) _status.text = "Not sharing your record - turn on Community Leaderboard in Settings";
-            else if (string.IsNullOrEmpty(Board.EffectiveName)) _status.text = "Sharing as your in-game name once a match has been played";
-            else if (!string.IsNullOrEmpty(Board.LastError)) _status.text = Board.LastError;
-            else if (st != null && st.Me != null && !st.Me.Master)
-                _status.text = "Sharing as " + Board.EffectiveName + "   ·   " +
-                               LeagueTitle(st.Me.Exp) + " - Master only on the board";
-            else _status.text = "Sharing as " + Board.EffectiveName +
-                                (string.IsNullOrEmpty(Board.LastSubmit) ? "" : "   ·   last submit: " + Board.LastSubmit);
+
+            bool on = Board.Enabled;
+            if (_shareTick != null)
+            {
+                var img = _shareTick.GetComponent<Image>();
+                if (img != null) img.color = on ? Accent : new Color(0f, 0f, 0f, 0f);
+            }
+
+            // Says what the switch does, not what the service is doing - the submit status was
+            // detail for a setting nobody was looking at.
+            var who = Board.EffectiveName;
+            _status.text = !on ? "Not sharing your score"
+                         : string.IsNullOrEmpty(who) ? "Sharing your score once you have played a match"
+                         : "Sharing your score as " + who;
         }
 
 

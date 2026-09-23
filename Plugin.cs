@@ -33,7 +33,6 @@ namespace PrizeTracker
         private Tracker _tracker;
         private MatchDetector _detector;
         private MatchHistory _history;
-        private SettingsSection _settings;
         private Leaderboard _board;
         private Season _season;
 
@@ -145,6 +144,7 @@ namespace PrizeTracker
                 s.Board = board;
                 s.Season = season;
                 s.History = history;   // the podium's avatars come from matches we watched
+                s.OnSharingChanged = SaveSettings;
                 return s;
             };
 
@@ -155,9 +155,6 @@ namespace PrizeTracker
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
 
-            _settings = _host.AddComponent<SettingsSection>();
-            _settings.Board = _board;
-            _settings.OnChanged = SaveSettings;
 
 
 
@@ -222,8 +219,6 @@ namespace PrizeTracker
             // NOT F6: that is ScriptEngine's reload key, so pressing it would dump the UI from the
             // instance being torn down at the same moment a new one is loading - noise in the log
             // at exactly the point the log matters most.
-            if (Input.GetKeyDown(KeyCode.F8) && _settings != null)
-                _settings.DumpNow();
         }
 
         /// <summary>

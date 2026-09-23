@@ -43,11 +43,22 @@ namespace PrizeTracker.Core
         /// </summary>
         private const float FigureHeight = 1.80f;
 
+        /// <summary>The field of view all three podium cameras are held at (the client's own 25).</summary>
+        private const float Fov = 25f;
+
         /// <summary>
         /// One figure loads at a time. The body type is a global on AvatarManager rather than part
         /// of the outfit, so three concurrent loads would each overwrite the others' answer.
         /// </summary>
         private static bool _loading;
+
+        /// <summary>
+        /// End of frame, not end of Update. The client re-frames the player's avatar camera in
+        /// its own LateUpdate, so a correction written from an ordinary coroutine step is
+        /// overwritten before anything is drawn - which is why first place kept rendering larger
+        /// than the other two even while being corrected every single frame.
+        /// </summary>
+        private static readonly WaitForEndOfFrame _endOfFrame = new WaitForEndOfFrame();
 
         /// <summary>
         /// How wide a block is, in world units. Public because the podium has to space its columns
@@ -72,7 +83,9 @@ namespace PrizeTracker.Core
         {
             public AvatarBaseController Ctrl;
             public Camera Cam;
-            public Vector3 CamPos;
+            public Vector3 CamPos;      // where the client had it, to give back
+            public Vector3 Framed;      // where we need it, to hold it there
+            public float Fov;           // and at what field of view
             public RenderTexture OriginalTarget;
             public RenderTexture Ours;
             public GameObject Block;
@@ -165,6 +178,11 @@ namespace PrizeTracker.Core
             // wrapped in a try/catch around the yield - a failure inside it is reported by the
             // client's own logging, and the worst case is a figure that does not appear.
             yield return ctrl.LoadAvatar(outfit);
+
+            // Let the figure settle before anything measures it. LoadAvatar returns once the
+            // parts are requested, not once they are all in place, and the ground is read off
+            // those parts - measuring on the same frame gave each podium a different answer.
+            for (int f = 0; f < 3; f++) yield return null;
             _loading = false;
 
             if (target == null) { _loading = false; yield break; }   // the screen closed mid-load
@@ -216,6 +234,25 @@ namespace PrizeTracker.Core
             if (target == null) yield break;
 
             foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
+
+            // Hold the framing. Setting it once is not enough for first place: that is the
+            // PLAYER group, which the client drives for its own profile screen and re-frames
+            // whenever it feels like it - opening Settings is enough. The result was first
+            // place's block rendering a quarter larger than the other two, because its camera
+            // had quietly moved closer.
+            //
+            // Cheap: three vector comparisons a frame, and only while the podium is on screen.
+            var mine = _held[place];
+            while (target != null && mine != null && mine.Cam != null && _held[place] == mine)
+            {
+                if ((mine.Cam.transform.position - mine.Framed).sqrMagnitude > 0.0001f)
+                    mine.Cam.transform.position = mine.Framed;
+                // The field of view has to be held as well: the distance was worked out FROM it,
+                // so the client changing it silently rescales the whole picture.
+                if (Mathf.Abs(mine.Cam.fieldOfView - mine.Fov) > 0.01f)
+                    mine.Cam.fieldOfView = mine.Fov;
+                yield return _endOfFrame;
+            }
         }
 
         // Short. A long blend reads as the figure drifting out of the pose rather than
@@ -297,20 +334,25 @@ namespace PrizeTracker.Core
                 var held = Take(place, cam);
                 held.Ctrl = ctrl;
 
-                // The group's own transform, and a FIXED figure height - not measured bounds.
+                // The ground is MEASURED from the figure; the height above it is FIXED.
                 //
-                // Measuring the figure looked more correct and is why the three blocks kept
-                // coming out subtly different. Bounds are whatever is assembled at the instant
-                // they are read, and the three figures finish dressing at different moments, so
-                // each podium was framed against a slightly different silhouette: blocks a few
-                // units apart in height, with a visible step at every join.
-                //
-                // Every group stands on its own transform (probed: y = 0.05, 0.00 and 0.63), and
-                // the avatars are all the same 1.8 units tall, so this frames all three
-                // identically and the blocks come out pixel for pixel the same.
+                // Both halves matter. Measuring the height too made the three blocks come out
+                // different sizes, because a silhouette changes with the pose and with what has
+                // finished loading - so the height is a constant and all three are framed
+                // identically. But the ground cannot be taken from the group's transform: the
+                // client offsets male and female models differently inside their group (that is
+                // what SetPlatformOffset is for), so once the three stopped being the same body
+                // type, the transform stopped being where the feet are and the blocks drifted
+                // apart again by about 12 units.
                 var rends = ctrl.GetComponentsInChildren<Renderer>(true);
-                int layer = rends.Length > 0 ? rends[0].gameObject.layer : ctrl.gameObject.layer;
-                var ground = ctrl.transform.position;
+                if (rends.Length == 0) return false;
+                int layer = rends[0].gameObject.layer;
+                var bounds = rends[0].bounds;
+                for (int i = 1; i < rends.Length; i++)
+                    if (rends[i] != null) bounds.Encapsulate(rends[i].bounds);
+
+                var ground = new Vector3(ctrl.transform.position.x, bounds.min.y,
+                                         ctrl.transform.position.z);
                 float feet = ground.y;
                 float head = feet + FigureHeight;
                 held.Block = MakeBlock(layer, ground, feet, blockH, blockColour);
@@ -327,14 +369,20 @@ namespace PrizeTracker.Core
                 const float Headroom = Headspace;
                 float bottom = feet - blockH;
                 float top = head + Headroom;
-                float dist = (top - bottom) / (2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
+                // The field of view is SET, not read. Inheriting whatever each camera happened to
+                // be on made the three podiums render at slightly different scales, because the
+                // distance is worked out from it - and the client had already been at these
+                // cameras. Pinning it makes all three provably identical.
+                cam.fieldOfView = Fov;
+                float dist = (top - bottom) / (2f * Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad));
 
                 // Which side the camera looks from, kept as it was: the professor's camera faces
                 // the other way (probed: y rotation 180) and moving it to the near side would put
                 // the figure behind it.
                 float side = Mathf.Abs(Mathf.DeltaAngle(cam.transform.eulerAngles.y, 0f)) < 90f ? -1f : 1f;
-                cam.transform.position = new Vector3(ground.x, (top + bottom) * 0.5f,
-                                                     ground.z + side * dist);
+                held.Framed = new Vector3(ground.x, (top + bottom) * 0.5f, ground.z + side * dist);
+                held.Fov = Fov;
+                cam.transform.position = held.Framed;
 
                 cam.gameObject.SetActive(true);
                 cam.enabled = true;
