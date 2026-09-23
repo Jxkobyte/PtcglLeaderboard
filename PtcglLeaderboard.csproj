@@ -38,6 +38,19 @@
     <BepInExScripts Condition="'$(BepInExScripts)' == ''">$(GameRoot)\BepInEx\scripts</BepInExScripts>
   </PropertyGroup>
 
+  <!--
+    Dev tools exist in DEBUG builds only. Debug is the dev loop: hot reload into BepInEx\scripts,
+    the probes that dump the client's UI and textures to disk, the live-tuning file and the F3/F4
+    deck keys. Release is what build.ps1 packages for players, and it contains none of them - no
+    files written beside the game, no hotkeys, nothing a player could trip over.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DEVTOOLS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Core\HotReload.cs;Core\Probe.cs;Core\CardAspectProbe.cs;Core\TexDump.cs;Core\Tuning.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Tests\ and Preview\ are gone: both existed only for prize tracking and were already
          broken at HEAD after it was removed. Launcher\ is a separate exe, built on its own. -->
@@ -84,7 +97,9 @@
     -->
   </ItemGroup>
 
-  <Target Name="DeployToScripts" AfterTargets="Build" Condition="Exists('$(BepInExScripts)')">
+  <!-- Debug only: a Release build dropped into scripts\ would load alongside an installed copy in
+       plugins\, and two copies of the plugin means two of everything. -->
+  <Target Name="DeployToScripts" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' And Exists('$(BepInExScripts)')">
     <!--
       The .pdb goes too, and is NOT optional. ScriptEngine reads the assembly WITH SYMBOLS, so a
       DLL with no .pdb beside it throws SymbolsNotFoundException out of Mono.Cecil and the plugin

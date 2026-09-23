@@ -407,6 +407,7 @@ namespace PtcglLeaderboard.Core
 
             Plugin.Log.LogInfo(Caption + " tab added: cloned \"" + tabRoot.name + "\" into \"" +
                                container.name + "\" after \"" + InsertAfter + "\".");
+#if DEVTOOLS
             foreach (Transform sib in container)
             {
                 var lbl = sib.GetComponentInChildren<TextMeshProUGUI>(true);
@@ -416,6 +417,7 @@ namespace PtcglLeaderboard.Core
                                    (lbl != null ? (lbl.text ?? "").Trim() : "") + "\" color=" +
                                    (lbl != null ? lbl.color.ToString() : "?") + " active=[" + active + "]");
             }
+#endif
         }
 
         /// <summary>

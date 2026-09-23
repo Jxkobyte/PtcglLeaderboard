@@ -156,10 +156,12 @@ namespace PtcglLeaderboard
 
             _host.AddComponent<CardArt>();   // serves card textures to the overlay
             _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
+            _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
+#if DEVTOOLS
             _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
             _host.AddComponent<CardAspectProbe>(); // what shape does the CLIENT draw a card texture at
-            _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
+#endif
 
 
 
@@ -176,7 +178,11 @@ namespace PtcglLeaderboard
 
             ApplyEnabled(_cfgEnabled.Value);
 
-            Log.LogWarning(NAME + " v" + VERSION + " loaded. F3 reload deck, F4 clipboard deck, F6 hot reload, F8 dump UI.");
+#if DEVTOOLS
+            Log.LogWarning(NAME + " v" + VERSION + " loaded (DEV build). F3 reload deck, F4 clipboard deck, F6 hot reload.");
+#else
+            Log.LogInfo(NAME + " v" + VERSION + " loaded.");
+#endif
         }
 
         private void BindConfig()
@@ -282,6 +288,7 @@ namespace PtcglLeaderboard
         private void Update()
         {
 
+#if DEVTOOLS
             Tuning.Poll();
 
             if (_detector == null || !_cfgEnabled.Value) return;
@@ -291,6 +298,7 @@ namespace PtcglLeaderboard
 
             if (Input.GetKeyDown(KeyCode.F4))
                 _detector.TryLoadDeckFromClipboard();
+#endif
 
             // F8 dumps whatever UI is on screen, for working out how a screen is built without
             // guessing and restarting the game each time.

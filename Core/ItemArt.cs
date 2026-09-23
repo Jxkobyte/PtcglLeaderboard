@@ -117,8 +117,10 @@ namespace PtcglLeaderboard.Core
                 // textures turned out to be square with the card stretched to fill them, which is
                 // the opposite of what "keep its proportions" would do; a sleeve may or may not
                 // follow the same convention and guessing has cost a round each time.
+#if DEVTOOLS
                 TexDump.Once(request.asset, "item_" + request.asset.width + "x"
                              + request.asset.height + "_" + itemId);
+#endif
             }
             else Fail(itemId, "no texture in bundle " + bundleName);
         }

@@ -37,6 +37,7 @@ namespace PtcglLeaderboard.Core
         private float _next;
         private bool _logged;
         private bool _failed;
+        private bool _inMatch;
 
         private Image _box, _tick;
 
@@ -50,8 +51,22 @@ namespace PtcglLeaderboard.Core
             if (_failed || Time.unscaledTime < _next) return;
             _next = Time.unscaledTime + 1f;
 
-            // Hands off the in-match settings menu, see the class comment.
-            if (Game.InMatch()) return;
+            // Hands off the in-match settings menu, see the class comment. Not adding the card is
+            // only half of it: a card added in the lobby could still be sitting on a settings
+            // screen the client reuses in the match, so on the way INTO a match any card of ours
+            // is removed as well - once, on the transition, not every second.
+            if (Game.InMatch())
+            {
+                if (!_inMatch)
+                {
+                    _inMatch = true;
+                    int removed = RemoveCards();
+                    Plugin.Log.LogInfo("settings card: match started - not injecting" +
+                                       (removed > 0 ? ", removed " + removed + " left over from the lobby" : ""));
+                }
+                return;
+            }
+            _inMatch = false;
 
             try { Ensure(); }
             catch (Exception e)
@@ -59,6 +74,23 @@ namespace PtcglLeaderboard.Core
                 _failed = true;
                 Plugin.Log.LogWarning("settings section disabled: " + e.Message);
             }
+        }
+
+        /// <summary>Destroy every copy of our card, wherever it is. Returns how many there were.</summary>
+        private static int RemoveCards()
+        {
+            int n = 0;
+            try
+            {
+                foreach (var t in Resources.FindObjectsOfTypeAll<Transform>())
+                {
+                    if (t == null || t.name != SectionName || !t.gameObject.scene.IsValid()) continue;
+                    UnityEngine.Object.Destroy(t.gameObject);
+                    n++;
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("settings card: could not remove: " + e.Message); }
+            return n;
         }
 
         /// <summary>True when any node we must preserve lives underneath <paramref name="t"/>.</summary>
