@@ -97,8 +97,8 @@ namespace PrizeTracker.Core
         // behind them is. Fixed by the SHORTEST front face, which is third place's: everything has
         // to fit on that one, and the extra room on the taller blocks reads as height rather than
         // as space to fill.
-        private const float EloUp = 20f, NameUp = 54f, NumeralUp = 90f;
-        private const float LineBox = 40f;
+        private const float EloUp = 16f, NameUp = 42f, NumeralUp = 74f;
+        private const float LineBox = 34f;
         private const float ImgHMax = PodiumH - NameStrip, ImgAspect = 452f / 516f;
         private const int PodiumPlaces = 3;
 
@@ -352,6 +352,13 @@ namespace PrizeTracker.Core
                 Plinth(p, i, me);
             }
 
+            // First place last, so it draws in FRONT of the two beside it. The blocks overlap
+            // slightly to close the seam between them, and this canvas draws in sibling order -
+            // so built in rank order, second and third were laid over the gold block's edges and
+            // over the winner's outstretched arms.
+            if (places > 0 && _podiumArt.Count > 0 && _podiumArt[0] != null)
+                _podiumArt[0].transform.SetAsLastSibling();
+
             int total = Mathf.Max(0, st.Players.Count - places);
             int start = _pager.Start(total), shown = _pager.Count(total);
             for (int i = start; i < start + shown; i++)
@@ -417,10 +424,11 @@ namespace PrizeTracker.Core
             // Shorter than they were. The camera has to frame block plus figure plus enough
             // room above for raised arms, so every unit of block is a unit the figure does not
             // get - and the figure is the thing worth looking at.
-            // Tall enough to letter on. These carry the position, the name and the rating on
-            // their front faces, so the front has to hold three lines - which is most of what
-            // the block's height is for.
-            float[] blocks = { 1.18f, 1.02f, 0.90f };
+            // Only just tall enough to letter on. Every unit of block is a unit the figure
+            // does not get, since the camera frames both, so these are cut to what the three
+            // lines on the front actually need - measured against THIRD place, whose front face
+            // is the shortest and therefore sets the floor for all of them.
+            float[] blocks = { 0.85f, 0.77f, 0.70f };
 
             float x = xs[place], blockH = blocks[place];
             Color medal = Medal[place], dim = MedalDim[place];
@@ -465,7 +473,7 @@ namespace PrizeTracker.Core
                 // block seen from above shows that face across its upper third, so "centred on
                 // the block" is not on the face you are reading.
                 var num = GameArt.Label("Text_Bold", t, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
-                                        36, Color.white, TextAlignmentOptions.Center);
+                                        32, Color.white, TextAlignmentOptions.Center);
                 // Place() positions by the PIVOT, and a bottom pivot means y is the box's bottom
                 // edge - so a 40-tall box placed at 16 put the glyph's centre at 36, which on
                 // third place's short front face was right at its top edge. Half the box height
@@ -517,11 +525,11 @@ namespace PrizeTracker.Core
             // White on the block, not grey under it: these are lettered onto the podium now, so
             // they take the block's own ink rather than the panel's.
             var elo = GameArt.Label("Text_Medium", t, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
-                                    24, new Color(1f, 1f, 1f, 0.85f), TextAlignmentOptions.Center);
+                                    22, new Color(1f, 1f, 1f, 0.85f), TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0,
                                       EloUp - LineBox * 0.5f, ColW, LineBox);
 
-            var name = GameArt.Label("Text_Medium", t, "", 28, Color.white,
+            var name = GameArt.Label("Text_Medium", t, "", 26, Color.white,
                                      TextAlignmentOptions.Center);
             name.richText = true;
             name.text = Esc(p.DisplayName) +

@@ -35,7 +35,7 @@ namespace PrizeTracker.Core
         /// <summary>
         /// Room left above the head, in world units, for arms raised by an animation.
         /// </summary>
-        private const float Headspace = 0.55f;
+        private const float Headspace = 0.50f;
 
         /// <summary>
         /// About how tall the framed figure is, head to foot plus that headroom, in world units.
