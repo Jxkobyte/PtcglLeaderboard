@@ -101,6 +101,19 @@ namespace PrizeTracker.Core
         public override bool DeferReconnectRequest { get { return true; } }
         public override ScreenType screenType { get { return ScreenType.None; } }
 
+        /// <summary>
+        /// Give the shared avatar groups back when the screen closes.
+        ///
+        /// The podium borrows the client's own player/opponent/professor avatars, so leaving
+        /// without restoring would show whoever topped the leaderboard on the profile screen.
+        /// </summary>
+        public override void OnDeactivate(HUBGroupController nextGroup)
+        {
+            try { PodiumAvatars.Release(this); }
+            catch (Exception e) { Plugin.Log.LogWarning("leaderboard: " + e.Message); }
+            base.OnDeactivate(nextGroup);
+        }
+
         public override void OnActivate(HUBGroupController prevGroup)
         {
             base.OnActivate(prevGroup);
@@ -108,6 +121,10 @@ namespace PrizeTracker.Core
             {
                 Build();
                 _pager.Reset();
+                // Reads and reports our own outfit once, so it is obvious from the log whether we
+                // can put a figure of ourselves on other people's podiums - a silent nothing is
+                // indistinguishable from a broken read.
+                OutfitCode.Mine();
                 if (Board != null) Board.Refresh(true);
                 Populate();
             }
@@ -370,16 +387,21 @@ namespace PrizeTracker.Core
             var plate = Img("Plate", ring, GameArt.Sprite("btn_Oct_16"), dim);
             NativeHistoryScreen.Place(plate, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, avw, avh);
 
-            var tex = Avatars.ForPlayer(History, p.DisplayName, me);
-            if (tex != null)
+            // Best first: a live 3D figure, built from the outfit the board carries. Then the
+            // still we photographed the last time we watched them play. Then their initial.
+            var outfit = OutfitCode.Parse(p.Outfit);
+            var tex = outfit != null ? null : Avatars.ForPlayer(History, p.DisplayName, me);
+
+            if (outfit != null || tex != null)
             {
                 var face = new GameObject("Face", typeof(RectTransform), typeof(RawImage));
                 face.transform.SetParent(plate, false);
                 var raw = face.GetComponent<RawImage>();
-                raw.texture = tex;
+                raw.texture = tex;                       // null for a 3D figure until its camera connects
                 raw.raycastTarget = false;
                 NativeHistoryScreen.Place((RectTransform)face.transform, 0.5f, 0.5f, 0.5f, 0.5f,
                                           0, 0, avw - 8, avh - 8);
+                if (outfit != null) PodiumAvatars.Show(this, place, raw, outfit, OutfitCode.IsMale(p.Outfit));
             }
             else
             {

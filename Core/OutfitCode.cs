@@ -37,6 +37,20 @@ namespace PrizeTracker.Core
             [JsonProperty("items")] public Dictionary<string, string> Items;
         }
 
+        /// <summary>
+        /// Which body a stored outfit is for. The camera frames a male and a female figure
+        /// differently, so this is asked before the figure is shown rather than after.
+        /// </summary>
+        public static bool IsMale(string json)
+        {
+            try
+            {
+                var wire = JsonConvert.DeserializeObject<Wire>(json);
+                return wire != null && wire.Look == 0;
+            }
+            catch { return false; }
+        }
+
         /// <summary>The local player's current outfit as JSON, or null if it is not available.</summary>
         public static string Mine()
         {
