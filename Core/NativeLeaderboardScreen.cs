@@ -54,8 +54,12 @@ namespace PrizeTracker.Core
         // about 2560x1440 - of which the client's nav bar owns the top ~95. PanelDrop pushes the
         // centred panel below it, because Center() is symmetrical and would otherwise put the
         // title under the nav.
-        private const float PanelW = 2480f, PanelH = 1290f, PanelDrop = -32f;
-        private const float RowW = 2320f, RowH = 92f, RowGap = 6f;
+        // The panel takes the whole screen below the nav bar. Measured on a real 1920x1080
+        // client: a unit draws at 0.75px, so the canvas is about 2560x1440 and the client's nav
+        // owns the top ~95. Center() is symmetrical, so PanelDrop pushes it clear of the nav
+        // rather than the panel being sized down to avoid it.
+        private const float PanelW = 2480f, PanelH = 1310f, PanelDrop = -40f;
+        private const float RowW = 2320f, RowH = 74f, RowGap = 6f;
 
         // Every column below was placed for a 2100-wide row. Rather than retype them, the
         // right-hand group moves by exactly the extra width and the middle takes a share, so a
@@ -64,7 +68,15 @@ namespace PrizeTracker.Core
 
         // The podium takes the top three out of the list and shows them properly, so the page
         // still holds seven players - three on the podium and four in the list beneath it.
-        private const float PodiumTop = 132f, PodiumH = 460f;
+        // The podium starts at the very top. There is no title strip above it any more: the
+        // heading moved into the gutter beside the columns, which is dead space the podium was
+        // never going to use, and that bought the list its seventh row.
+        private const float PodiumTop = 20f, PodiumH = 480f;
+
+        // The tallest place's picture, and the shape they are all drawn at. Everything else on the
+        // podium is measured from these two. NameStrip is what the name and rating take above it.
+        private const float NameStrip = 86f;
+        private const float ImgHMax = PodiumH - NameStrip, ImgAspect = 452f / 516f;
         private const int PodiumPlaces = 3;
 
         // The headings are placed by their TOP edge, so the rows have to clear the whole 40 of
@@ -77,9 +89,11 @@ namespace PrizeTracker.Core
         // Derived BOTTOM-UP from the footer rule, so the row count is whatever actually fits
         // rather than a number counted once by hand. The strip used to be drawn through the
         // pinned row when the count and the arithmetic disagreed; now they cannot.
-        private const float FootRuleTop = PanelH - 108f;              // 1132
+        // One strip along the bottom carries paging in the middle and the footer notes at
+        // either end, rather than stacking a rule, a footer line and a paging line. Three strips
+        // cost over 100 units of height for text that fits beside the buttons.
         private const float PagingH = 52f;
-        private const float PagingTop = FootRuleTop - 16f - PagingH;
+        private const float PagingTop = PanelH - 34f - PagingH;
         private const float PinnedTop = PagingTop - 16f - RowH;
         private const float RowsSpace = PinnedTop - 8f - BodyTop;
         private const int VisibleRows = (int)((RowsSpace + RowGap) / (RowH + RowGap));
@@ -157,15 +171,19 @@ namespace PrizeTracker.Core
             var panel = Img("Panel", root, GameArt.Sprite("btn_Oct_20"), Color.white);
             Center(panel, PanelW, PanelH, 0, PanelDrop);
 
-            var title = GameArt.Label("Text_Bold", panel, "COMMUNITY LEADERBOARD", 50, Ink,
-                                      TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 80, -44, 1200, 64);
+            // The heading sits BESIDE the podium, in the gutter its columns leave empty, and
+            // wraps onto two lines to fit there. A full-width title strip across the top cost
+            // about 140 units of height for one line of text, and that was the difference
+            // between six rows in the list and seven.
+            var title = GameArt.Label("Text_Bold", panel, "COMMUNITY\nLEADERBOARD", 42, Ink,
+                                      TextAlignmentOptions.TopLeft);
+            title.enableWordWrapping = true;
+            title.lineSpacing = -14f;
+            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -34, 420, 130);
 
-            _subtitle = GameArt.Label("Text_Regular", panel, "", 30, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -80, -50, 1000, 44);
-
-            var rule = Img("Rule", panel, null, Hairline);
-            NativeHistoryScreen.Place(rule, 0.5f, 1, 0.5f, 1, 0, -122, RowW, 2);
+            _subtitle = GameArt.Label("Text_Regular", panel, "", 28, InkDim, TextAlignmentOptions.TopRight);
+            _subtitle.enableWordWrapping = true;
+            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -76, -36, 420, 120);
 
             var podium = new GameObject("Podium", typeof(RectTransform));
             podium.transform.SetParent(panel, false);
@@ -194,16 +212,16 @@ namespace PrizeTracker.Core
             NativeHistoryScreen.Place(_empty.rectTransform, 0.5f, 1, 0.5f, 1, 0, -420, 1400, 200);
             _empty.enableWordWrapping = true;
 
-            var footRule = Img("FootRule", panel, null, Hairline);
-            NativeHistoryScreen.Place(footRule, 0.5f, 0, 0.5f, 0, 0, 108, RowW, 2);
-
+            // The footer notes share the paging line, at either end of it. PREV and NEXT reach
+            // 325 either side of centre, so 340 is where text can start without running into
+            // them.
             _foot = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 62, 1500, 40);
+            NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 60, 780, 40);
 
             _status = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 62, 1020, 40);
+            NativeHistoryScreen.Place(_status.rectTransform, 1, 0, 1, 0, -80, 60, 780, 40);
 
-            // Paging sits just above the footer rule, clear of both the rows and the status line.
+
             _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 1, 0, -PagingTop, 360, 40);
             _pagePrev = PageButton(panel, "PREV", -230, () => { if (_pager.Move(-1, Total())) Populate(); });
@@ -343,19 +361,29 @@ namespace PrizeTracker.Core
 
             // Second, first, third - left to right. First place stands in the middle and highest,
             // which is the whole reason a podium reads as a ranking without being labelled.
-            const float ColW = 480f;
-            float[] xs = { 0f, -ColW, ColW };        // the blocks touch, so it reads as one podium
-            // Taller blocks, slightly shorter figures: the numeral and the rating both have to
-            // sit INSIDE the block, clear of the figure standing on it. Sized so that first
-            // place's whole column - block, figure, name - still fits the band.
-            float[] hs = { 160f, 122f, 98f };
-            // Taller than wide: this frames a standing figure, not a headshot.
-            float[] avws = { 250f, 220f, 220f };
-            float[] avhs = { 230f, 205f, 205f };
+            const float ColW = 520f;
+            float[] xs = { 0f, -ColW, ColW };
 
-            float x = xs[place], hp = hs[place];
-            float avw = avws[place], avh = avhs[place];
+            // Block heights in WORLD units, not pixels: the block is a real cube in front of the
+            // real camera, and the camera frames block plus figure. A taller block therefore
+            // pushes its figure higher inside an image the same size as its neighbours', and
+            // aligning the three images along their bottoms is what makes the steps.
+            // Shorter than they were. The camera has to frame block plus figure plus enough
+            // room above for raised arms, so every unit of block is a unit the figure does not
+            // get - and the figure is the thing worth looking at.
+            float[] blocks = { 0.62f, 0.44f, 0.30f };
+
+            float x = xs[place], blockH = blocks[place];
             Color medal = Medal[place], dim = MedalDim[place];
+
+            // Each place's picture is sized in PROPORTION to what its camera frames, so every
+            // figure comes out at the same scale on screen and only the blocks differ. Sizing all
+            // three pictures the same instead made third place's figure the LARGEST - its block
+            // is the shortest, so the same picture height was spread over less world - which
+            // quietly argued against the ranking the podium exists to show.
+            float pxPerUnit = ImgHMax / (PodiumAvatars.FramedHeight + blocks[0]);
+            float imgH = pxPerUnit * (PodiumAvatars.FramedHeight + blockH);
+            float imgW = imgH * ImgAspect;
 
             var col = new GameObject("Place" + (place + 1), typeof(RectTransform));
             col.transform.SetParent(_podium, false);
@@ -363,61 +391,86 @@ namespace PrizeTracker.Core
             _podiumArt.Add(col);
             Transform t = col.transform;
 
-            var block = Img("Block", t, GameArt.Sprite("btn_Oct_16"), medal);
-            NativeHistoryScreen.Place(block, 0.5f, 0, 0.5f, 0, 0, 0, ColW, hp);
-
-            // Both of these are sized and placed as a FRACTION of the block they sit in. At a
-            // fixed 54pt the numeral stood taller than third place's block, overflowed the top of
-            // it, and was then covered by the avatar standing on it - so third place's "3" was
-            // sliced in half.
-            var num = GameArt.Label("Text_Bold", block, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
-                                    Mathf.RoundToInt(Mathf.Clamp(hp * 0.42f, 30f, 54f)),
-                                    Color.white, TextAlignmentOptions.Center);
-            NativeHistoryScreen.Place(num.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp * 0.58f, 200, hp * 0.40f);
-
-            var elo = GameArt.Label("Text_Medium", block, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
-                                    28, new Color(1f, 1f, 1f, 0.88f), TextAlignmentOptions.Center);
-            NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp * 0.20f, 300, hp * 0.28f);
-
-            // Seated ON the block, not hovering over it - a couple of units of overlap is what
-            // makes them read as standing on the podium rather than floating above it.
-            var ring = Img("Ring", t, GameArt.Sprite("btn_Oct_16"), medal);
-            NativeHistoryScreen.Place(ring, 0.5f, 0, 0.5f, 0, 0, hp - 2, avw + 12, avh + 12);
-
-            var plate = Img("Plate", ring, GameArt.Sprite("btn_Oct_16"), dim);
-            NativeHistoryScreen.Place(plate, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, avw, avh);
-
-            // Best first: a live 3D figure, built from the outfit the board carries. Then the
-            // still we photographed the last time we watched them play. Then their initial.
+            // Best first: a live 3D figure standing on a real block, built from the outfit the
+            // board carries. Then the still we photographed the last time we watched them play.
+            // Then their initial.
             var outfit = OutfitCode.Parse(p.Outfit);
             var tex = outfit != null ? null : Avatars.ForPlayer(History, p.DisplayName, me);
 
-            if (outfit != null || tex != null)
+            if (outfit != null)
             {
-                var face = new GameObject("Face", typeof(RectTransform), typeof(RawImage));
-                face.transform.SetParent(plate, false);
-                var raw = face.GetComponent<RawImage>();
-                raw.texture = tex;                       // null for a 3D figure until its camera connects
+                var stage = new GameObject("Figure", typeof(RectTransform), typeof(RawImage));
+                stage.transform.SetParent(t, false);
+                var raw = stage.GetComponent<RawImage>();
                 raw.raycastTarget = false;
-                NativeHistoryScreen.Place((RectTransform)face.transform, 0.5f, 0.5f, 0.5f, 0.5f,
-                                          0, 0, avw - 8, avh - 8);
-                if (outfit != null) PodiumAvatars.Show(this, place, raw, outfit, OutfitCode.IsMale(p.Outfit));
+                raw.color = new Color(1f, 1f, 1f, 0f);       // until its camera has something to show
+                NativeHistoryScreen.Place((RectTransform)stage.transform, 0.5f, 0, 0.5f, 0,
+                                          0, 0, imgW, imgH);
+                PodiumAvatars.Show(this, place, raw, outfit, OutfitCode.IsMale(p.Outfit),
+                                   blockH, medal);
+
+                // How much of the image the block occupies, from the same arithmetic the camera
+                // was framed with - the block's share is its own height over the whole framed
+                // height. That is what puts the position numeral on the block rather than across
+                // the figure's shins, and it follows the headroom automatically.
+                float blockPx = pxPerUnit * blockH;
+                var num = GameArt.Label("Text_Bold", t, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
+                                        Mathf.RoundToInt(Mathf.Clamp(blockPx * 0.46f, 30f, 60f)),
+                                        Color.white, TextAlignmentOptions.Center);
+                // Low on the block, not centred on it: a block seen from slightly above shows
+                // its TOP face across the upper third, so a numeral centred on the block's full
+                // height sits on the top face rather than on the face you are reading.
+                NativeHistoryScreen.Place(num.rectTransform, 0.5f, 0, 0.5f, 0, 0,
+                                          blockPx * 0.30f, 240, blockPx * 0.56f);
             }
             else
             {
-                string initial = string.IsNullOrEmpty(p.DisplayName)
-                    ? "?" : p.DisplayName.Substring(0, 1).ToUpperInvariant();
-                var ini = GameArt.Label("Text_Bold", plate, initial, 84, medal,
-                                        TextAlignmentOptions.Center);
-                NativeHistoryScreen.Stretch(ini.rectTransform);
+                // No outfit to build from, so a flat plate in the medal colour carrying whatever
+                // likeness we do have. Same footprint, so the row of three still lines up.
+                float plateH = imgH * 0.55f;
+                var ring = Img("Ring", t, GameArt.Sprite("btn_Oct_16"), medal);
+                NativeHistoryScreen.Place(ring, 0.5f, 0, 0.5f, 0, 0, imgH * 0.2f,
+                                          plateH * 0.92f + 12f, plateH + 12f);
+
+                var plate = Img("Plate", ring, GameArt.Sprite("btn_Oct_16"), dim);
+                NativeHistoryScreen.Place(plate, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, plateH * 0.92f, plateH);
+
+                if (tex != null)
+                {
+                    var face = new GameObject("Face", typeof(RectTransform), typeof(RawImage));
+                    face.transform.SetParent(plate, false);
+                    var raw = face.GetComponent<RawImage>();
+                    raw.texture = tex;
+                    raw.raycastTarget = false;
+                    NativeHistoryScreen.Place((RectTransform)face.transform, 0.5f, 0.5f, 0.5f, 0.5f,
+                                              0, 0, plateH * 0.92f - 8f, plateH - 8f);
+                }
+                else
+                {
+                    string initial = string.IsNullOrEmpty(p.DisplayName)
+                        ? "?" : p.DisplayName.Substring(0, 1).ToUpperInvariant();
+                    var ini = GameArt.Label("Text_Bold", plate, initial, 84, medal,
+                                            TextAlignmentOptions.Center);
+                    NativeHistoryScreen.Stretch(ini.rectTransform);
+                }
+
+                var block = Img("Block", t, GameArt.Sprite("btn_Oct_16"), medal);
+                NativeHistoryScreen.Place(block, 0.5f, 0, 0.5f, 0, 0, 0, imgW, imgH * 0.22f);
+                var num = GameArt.Label("Text_Bold", block, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
+                                        48, Color.white, TextAlignmentOptions.Center);
+                NativeHistoryScreen.Stretch(num.rectTransform);
             }
 
-            var name = GameArt.Label("Text_Medium", t, "", 34, me ? Accent : Ink,
+            var elo = GameArt.Label("Text_Medium", t, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
+                                    30, InkDim, TextAlignmentOptions.Center);
+            NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0, ImgHMax + 6, ColW, 32);
+
+            var name = GameArt.Label("Text_Medium", t, "", 36, me ? Accent : Ink,
                                      TextAlignmentOptions.Center);
             name.richText = true;
             name.text = Esc(p.DisplayName) +
                         (me ? "  <size=20><color=#" + ColorUtility.ToHtmlStringRGB(Accent) + ">YOU</color></size>" : "");
-            NativeHistoryScreen.Place(name.rectTransform, 0.5f, 0, 0.5f, 0, 0, hp + avh + 16, ColW, 44);
+            NativeHistoryScreen.Place(name.rectTransform, 0.5f, 0, 0.5f, 0, 0, ImgHMax + 40, ColW, 46);
         }
 
         private void Row(Transform parent, BoardRow p, float y, bool me, Color bg)
