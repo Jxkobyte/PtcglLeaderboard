@@ -19,8 +19,12 @@ game back exactly as it was.
 
 ## 1. Download
 
-Download **`ptcgl-leaderboard-setup.exe`** from the
-[latest release](https://github.com/Jxkobyte/ptcgl-leaderboard/releases/latest).
+1. Open the **[latest release](https://github.com/Jxkobyte/ptcgl-leaderboard/releases/latest)**.
+2. Scroll down to **Assets**.
+3. Click **`ptcgl-leaderboard-setup.exe`** to download it. Not the two **Source code** files:
+   those are the mod's code, not the installer.
+
+![Assets: click ptcgl-leaderboard-setup.exe](install/0-release-assets.png)
 
 **Close Pokémon TCG Live before you continue.**
 
