@@ -47,6 +47,7 @@ namespace PrizeTracker.Core
         /// <summary>What a place borrowed, so it can be handed back exactly as it was.</summary>
         private class Borrowed
         {
+            public AvatarBaseController Ctrl;
             public Camera Cam;
             public Vector3 CamPos;
             public RenderTexture OriginalTarget;
@@ -138,23 +139,38 @@ namespace PrizeTracker.Core
             var mgr = Mgr;
             if (mgr == null) yield break;
 
-            // A podium is a victory, so they play the victory animations the client plays when a
-            // player wins a match, over and over. Once through and they would stand frozen for as
-            // long as the screen is open, which reads as a still image that happens to be 3D.
-            //
-            // The wait is staggered by place so the three of them are not moving in lockstep, and
-            // it runs even if PlayPoseAnimation returns straight away - otherwise a pose the
-            // client declines to play would spin this loop as fast as the frame rate.
-            while (target != null)
-            {
-                string anim = null;
-                try { anim = mgr.GetRandomVictoryAnimation(); }
-                catch { }
-                if (string.IsNullOrEmpty(anim)) yield break;
+            string anim = null;
+            try { anim = mgr.GetRandomVictoryAnimation(); }
+            catch { }
+            if (string.IsNullOrEmpty(anim)) yield break;
 
-                yield return ctrl.PlayPoseAnimation(anim, false, place == 0, true, null, false);
-                yield return new WaitForSeconds(2.5f + place * 0.7f);
+            // A podium is a victory, so they play the animation the client plays when a player
+            // wins a match - and then STAY in the pose it ends on.
+            //
+            // Holding it is the client's own trick and not something PlayPoseAnimation can do:
+            // that one takes a forceIdle flag, but its body ignores the flag completely and
+            // always finishes by calling ResetAnimationFromTrigger, which switches straight back
+            // to idle. Passing false would have changed nothing.
+            //
+            // FreezePoseAnimation instead stops the camera RENDERING near the end of the
+            // animation, so the render texture keeps the last frame it drew while the animator
+            // quietly returns to idle behind it. Give() resumes the camera, so the client gets it
+            // back unfrozen.
+            //
+            // Its onComplete is invoked WITHOUT a null check, so it gets an empty action rather
+            // than null - passing null throws inside the client's own coroutine.
+            bool held = false;
+            try
+            {
+                ctrl.FreezePoseAnimation(anim, place == 0, () => { }, false);
+                held = true;
             }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("podium " + place + ": could not hold the pose (" +
+                                      e.Message + "); playing it through instead.");
+            }
+            if (!held) yield return ctrl.PlayPoseAnimation(anim, false, place == 0, true, null, false);
         }
 
         /// <summary>
@@ -186,6 +202,7 @@ namespace PrizeTracker.Core
                 catch { }                                   // framing is a nicety, not a blocker
 
                 var held = Take(place, cam);
+                held.Ctrl = ctrl;
 
                 var rend = ctrl.GetComponentInChildren<Renderer>(true);
                 if (rend == null) return false;
@@ -267,7 +284,7 @@ namespace PrizeTracker.Core
             // the more of its TOP face is in view - and the top face eats the front face, which
             // is the one carrying the position numeral. At depth 1.2 third place had more top
             // than front and its numeral had nowhere to sit.
-            cube.transform.localScale = new Vector3(2.0f, h, 0.7f);
+            cube.transform.localScale = new Vector3(2.5f, h, 0.7f);
 
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)
@@ -296,6 +313,10 @@ namespace PrizeTracker.Core
             if (held == null) return;
             try
             {
+                // Unfreeze before anything else: the pose is held by leaving that camera
+                // paused, and handing it back paused would leave the client with an avatar that
+                // never redraws.
+                if (held.Ctrl != null) held.Ctrl.ResumeAvatarCamera(false);
                 if (held.Cam != null)
                 {
                     held.Cam.transform.position = held.CamPos;
