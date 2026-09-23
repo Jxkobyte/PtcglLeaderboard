@@ -210,34 +210,42 @@ namespace PrizeTracker.Core
         // than silently opening a hole somewhere, which is how the previous two attempts went
         // wrong - each was a set of hand-picked positions that stopped adding up the moment
         // anything either side of them moved.
-        private const float ArtGap = 24f;            // art to the text it belongs to
+        private const float ArtGap = 28f;            // art to the text it belongs to
 
         // The right-hand group, pinned to the row's right edge: a list's actions belong there.
         private const float RowRight = RowW - 20f;                    // 2080
-        private const float LogW = 170f, DeckW = 190f, BtnGap = 18f;
-        private const float LogRight = RowRight;                      // 1910..2080
-        private const float DeckRight = LogRight - LogW - BtnGap;     // 1702..1892
-        private const float WhenW = 190f;
-        private const float WhenRight = DeckRight - DeckW - ArtGap;   // 1488..1678
+        private const float LogW = 210f, DeckW = 230f, BtnGap = 20f;
+        private const float LogRight = RowRight;                      // 1870..2080
+        private const float DeckRight = LogRight - LogW - BtnGap;     // 1620..1850
+        private const float WhenW = 210f;
+        private const float WhenRight = DeckRight - DeckW - ArtGap;   // 1382..1592
         private const float WhenLeft = WhenRight - WhenW;
 
         // Our group, pinned left behind the result bar.
-        private const float SleeveX = 40f, SleeveW = 76f, SleeveH = 106f;
-        private const float MineX = SleeveX + SleeveW + ArtGap;       // 140
-        private const float MineW = 400f;
+        // The sleeve keeps the card crop's own 0.716 aspect - stretching it was a bug once
+        // already, so the height is derived from the width rather than typed in beside it.
+        private const float SleeveW = 84f, SleeveH = SleeveW / 0.716f;   // 84x117
+        private const float SleeveX = 40f;
+        private const float MineX = SleeveX + SleeveW + ArtGap;       // 152
+        private const float MineW = 440f;
 
         // The opponent's group, floated between the two by the leftover space.
         private const float AvatarSize = RowH - 8f;                   // 122
-        private const float OppW = 400f;
+        private const float OppW = 440f;
         private const float ClusterGap =
             (WhenLeft - (MineX + MineW) - (AvatarSize + ArtGap + OppW)) / 2f;
         private const float AvatarX = MineX + MineW + ClusterGap;
         private const float AvatarCx = AvatarX + AvatarSize / 2f;
         private const float OppX = AvatarX + AvatarSize + ArtGap;
 
-        // The rows area is 1040 tall and a row occupies 138 with its gap, so seven fit. The eighth
-        // would overhang the panel, which is what the paging strip below exists to avoid.
-        private const int RowsPerPage = 7;
+        // The rows area runs from under the header rule down to the paging strip, and how many
+        // rows fit is derived from it rather than counted once by hand. Taking the row height to
+        // 140 drew the seventh row straight through PREV/NEXT, because the count was a literal 7
+        // that no longer matched the arithmetic - now a height change just fits one fewer row.
+        private const float BodyTop = 172f;
+        private const float PagerY = 40f, PagerH = 58f, BodyBottomPad = 24f;
+        private const float BodyH = PanelH - (PagerY + PagerH / 2f) - BodyBottomPad - BodyTop;
+        private const int RowsPerPage = (int)((BodyH + RowGap) / (RowH + RowGap));
 
         public void Build()
         {
@@ -268,7 +276,7 @@ namespace PrizeTracker.Core
 
             var body = new GameObject("Rows", typeof(RectTransform));
             body.transform.SetParent(panel.transform, false);
-            Place((RectTransform)body.transform, 0.5f, 1, 0.5f, 1, 0, -172, RowW, 1040);
+            Place((RectTransform)body.transform, 0.5f, 1, 0.5f, 1, 0, -BodyTop, RowW, BodyH);
             _body = body.transform;
 
             _empty = GameArt.Label("Text_Regular", panel.transform,
@@ -318,7 +326,7 @@ namespace PrizeTracker.Core
         {
             var btn = Img("Page" + text, panel, GameArt.Sprite("btn_Oct_16"),
                           new Color(0.93f, 0.94f, 0.95f, 1f));
-            Place(btn, 0.5f, 0, 0.5f, 0, x, 40, 210, 58);
+            Place(btn, 0.5f, 0, 0.5f, 0, x, PagerY, 210, PagerH);
             var label = GameArt.Label("Text_MediumItalic", btn, text, InkDim,
                                       TextAlignmentOptions.Center, 28);
             Stretch(label.rectTransform);
@@ -356,7 +364,7 @@ namespace PrizeTracker.Core
             _rows.Add(row.gameObject);
 
             var bar = Img("Accent", row, null, accent);
-            Place(bar, 0, 0.5f, 0, 0.5f, 16, 0, 7, 92);
+            Place(bar, 0, 0.5f, 0, 0.5f, 16, 0, 7, 100);
 
             // Our deck box, clear of the result bar. At x=38 with a centred pivot it started at
             // x=1 and covered the bar entirely, so the result colour vanished on any row that had
@@ -373,15 +381,15 @@ namespace PrizeTracker.Core
             // Left-aligned, not centred. Centring started every row's WIN/LOSS at a different x,
             // so the column went ragged and the result - the one thing a history is scanned for -
             // stopped lining up down the list.
-            var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.MidlineLeft);
+            var head = GameArt.Label("Text_Medium", row, "", 38, Ink, TextAlignmentOptions.MidlineLeft);
             head.richText = true;
             head.text = "<color=#" + ColorUtility.ToHtmlStringRGB(accent) + "><b>" +
                         (m.Won ? "WIN" : "LOSS") + "</b></color>   " + Esc(m.MyDeck);
-            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, MineX, 18, MineW, 44);
+            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, MineX, 20, MineW, 48);
 
-            var meta = GameArt.Label("Text_Regular", row, Meta(m), 26, InkDim,
+            var meta = GameArt.Label("Text_Regular", row, Meta(m), 28, InkDim,
                                      TextAlignmentOptions.MidlineLeft);
-            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, MineX, -22, MineW, 36);
+            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, MineX, -24, MineW, 40);
 
             // Opponent avatar: same circular framing as before, at full row height.
             Art(row, AvatarKey(m), AvatarCx, 0, AvatarSize, AvatarSize, false, true);
@@ -390,17 +398,17 @@ namespace PrizeTracker.Core
             // to sit under it was inferred from whichever of their cards happened to be played,
             // and the real answer is one click away in VIEW DECK.
             var oppName = GameArt.Label("Text_Medium", row,
-                                        string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 34, Ink,
+                                        string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 38, Ink,
                                         TextAlignmentOptions.MidlineLeft);
-            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, OppX, 0, OppW, 44);
+            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, OppX, 0, OppW, 48);
 
             // Placed by its RIGHT edge so it cannot drift into VIEW DECK as widths change. The gap
             // has to be measured from the NEXT thing's LEFT edge - measuring it from VIEW DECK's
             // right edge once put the timestamp inside the button, so it vanished entirely rather
             // than merely overlapping.
-            var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
+            var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 28, InkDim,
                                      TextAlignmentOptions.MidlineRight);
-            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, WhenRight, 0, WhenW, 40);
+            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, WhenRight, 0, WhenW, 44);
 
             bool hasCards = m.OppCardsSeen() > 0;
             Button(row, "VIEW DECK", DeckRight, DeckW, true, hasCards, () => OpenDeck(m));
@@ -519,7 +527,7 @@ namespace PrizeTracker.Core
             var col = !enabled ? new Color(0.78f, 0.79f, 0.82f, solid ? 1f : 0f)
                     : solid ? Slate : new Color(0, 0, 0, 0f);
             var btn = Img("Btn", row, GameArt.Sprite("btn_Oct_16"), col);
-            Place(btn, 0, 0.5f, 1, 0.5f, x, 0, w, 58);
+            Place(btn, 0, 0.5f, 1, 0.5f, x, 0, w, 64);
 
             if (!solid)
             {
@@ -527,12 +535,12 @@ namespace PrizeTracker.Core
                                new Color(0.60f, 0.62f, 0.66f, enabled ? 1f : 0.5f));
                 Stretch(edge);
                 var inner = Img("Fill", edge, GameArt.Sprite("btn_Oct_16"), Color.white);
-                Place(inner, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, w - 4, 54);
+                Place(inner, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, w - 4, 60);
             }
 
             var label = GameArt.Label("Text_MediumItalic", btn, text,
                                       solid ? Color.white : new Color(0.36f, 0.38f, 0.41f, enabled ? 1f : 0.5f),
-                                      TextAlignmentOptions.Center, 26);
+                                      TextAlignmentOptions.Center, 28);
             Stretch(label.rectTransform);
             label.transform.SetAsLastSibling();
 
