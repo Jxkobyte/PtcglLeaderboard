@@ -1,157 +1,87 @@
 # PTCGL Leaderboard & Match History
 
-A BepInEx overlay for Pokémon TCG Live: prize tracking, deck tracking, opponent tracking, and a
-frame-rate limiter.
+![Devs not adding basic features to their game. "Fine." "I'll do it myself."](docs/meme.png)
 
-**Standalone.** This project has nothing to do with the PokeAI simulator/AI work. It contains no
-card-data export, no bulk card fetching and no engine tooling — it only reads the live match state
-and draws an overlay. Keep it that way.
+A mod for **Pokémon TCG Live** that adds two things the game should have had from the start:
 
-## How it reads the game
+- **Match History**: every game you play, with the result, prizes, turns, time taken, your
+  opponent's deck and the battle log.
+- **Leaderboard**: a community ranking of Master league players by ELO for the current season,
+  with the top three on a 3D podium wearing their own avatars.
 
-The tracker reads the client's **real match state** — `MatchManager.currentMatch.GetBoardState()`,
-which returns the `MatchLogic.MatchBoard` the rules engine itself runs on. That gives every zone for
-**both** seats in one read, with card conservation guaranteed by the engine.
+It only works in the menus. **It shows nothing and reads nothing during a match** apart from the
+start and the result, so there is no in-match advantage. It appears as native tabs in the game's
+own top bar, with a single on/off switch under **Settings → General**.
 
-It does **not** scrape Unity `GameObject` paths or `Card3D` components. That approach broke on any
-UI change, only ever saw the local player, and could not see a zone that was not currently rendered.
+**[Installation guide →](docs/INSTALL.md)**
 
-Cards the server hides from you arrive as redacted entities with `cardSourceID == ""` (confirmed in
-`MatchBoard.PrivatizeEntity` and the `CardEntity(entityID, …)` constructor). That empty id is
-exactly what separates "known" from "hidden", and the prize maths is built on it.
+![Leaderboard](docs/install/7-leaderboard.png)
 
-## Prize tracking
+## What is shared
 
-Your 60-card list comes from the client's own inventory (`PlayerInventoryManager.TryGetActiveDeck`),
-so there is nothing to paste or click before a match.
+Only your own season record goes to the leaderboard: your in-game name, rank points (ELO and season
+exp), wins and losses, and the item ids of the outfit your avatar wears, so other players' games can
+draw you on the podium. You are identified by a random ID the mod creates, not your Pokémon Trainer
+Club account. Nothing about your opponents is ever sent. Your match history stays on your computer,
+in `%LOCALAPPDATA%\PtcglLeaderboard`.
 
-Everything you cannot see sits in a set of interchangeable hidden slots — face-down deck plus
-face-down prizes. Which slot a copy occupies is uniformly random, so "is it prized?" is plain
-hypergeometry over that pool:
+## How it works
 
-- **odds from turn one**, sharpening every time a card is revealed
-  (a fresh 4-of is 35.1% to have at least one copy prized, a 1-of is 10.0%)
-- **provably prized** — when there is not enough room left in the deck to hold every unaccounted
-  copy, the overflow *must* be in the prizes, and it is shown as certain rather than a percentage
-- a **mismatch guard**: if the loaded list does not exactly fill the hidden slots (wrong deck, an
-  unresolvable name) it says so instead of showing confident wrong numbers
+- **A BepInEx plugin**, injected with BepInEx 5. It reuses the game's own screens, fonts, sprites
+  and avatar renderer, so the new tabs look like part of the game rather than an overlay.
+- **Match results** come from the client's real match state (`MatchManager` / `MatchLogic`), read
+  when a match starts and when it ends.
+- **The season** (its id, end date, league ladder and plaque art) comes from the client's own
+  cached season config. Nothing is hardcoded, so a new season is picked up automatically, including
+  a reset while the game is running.
+- **The leaderboard service** is a Cloudflare Worker with a D1 database (`leaderboard/`). The plugin
+  submits your season record at startup and after each match.
+- **The launcher** (`Launcher/`) is what the desktop shortcut starts. A PTCGL update can strip the
+  BepInEx injector out of the game folder, and a plugin that isn't loaded can't repair itself, so
+  the launcher checks the install against a pristine copy in `%LOCALAPPDATA%`, starts the game, and
+  watches for an update removing it.
 
-## Opponent tracking
+The installer lives in a separate repo, `ptcgl-leaderboard-installer` (Inno Setup, per-user, no
+admin).
 
-Everything they have revealed, accumulated over the match and keyed by **entityID**, so a card that
-moves zones (hand → discard → shuffled back) is counted exactly once and a genuine second copy is
-counted separately. Plus live prize / hand / deck / discard / lost-zone counts.
+## Building
 
-## Frame-rate limiter
-
-PTCGL renders an essentially static board as fast as the GPU allows. Three separate caps: in-match,
-in-menus, and while alt-tabbed. vsync is switched off so the cap actually applies, and background
-behaviour is only taken over when there is a real background cap to enforce.
-
-## Hotkeys
-
-| key | action |
-|-----|--------|
-| F1 | show/hide overlay |
-| F3 | reload the active decklist |
-| F4 | import a decklist from the clipboard (fallback) |
-
-Settings persist to `BepInEx/config/ptcgl.leaderboard.cfg` (window position/size, frame caps) and
-the caps can also be changed in the overlay's **SET** tab.
-
-## Build
-
-Requires the .NET SDK and a local PTCGL install. No Visual Studio needed — the net472 reference
-assemblies come from NuGet.
+Requires the .NET SDK and a local PTCGL install; the game's DLLs are referenced from its folder.
+Game paths can be overridden with `/p:GameRoot="…"`.
 
 ```
-dotnet build PtcglLeaderboard.csproj
+dotnet build PtcglLeaderboard.csproj -c Debug     # dev loop
+dotnet build PtcglLeaderboard.csproj -c Release   # what ships
 ```
 
-The plugin is copied into `BepInEx\plugins` automatically. **Close PTCGL first** — a running client
-holds the old DLL locked, and the build will say so rather than silently leaving you on a stale
-build. BepInEx only loads plugins at startup, so restart the game after a rebuild.
+- **Debug** is the dev loop. It deploys to `BepInEx\scripts` for ScriptEngine hot reload (press F6
+  in game), and includes the dev tools: UI/texture probes, the live-tuning file and the F3/F4 deck
+  keys.
+- **Release** is what the installer packages. It has none of the dev tools, no hotkeys, and writes
+  nothing beside the game. It isn't copied into the game folder; `build.ps1` in the installer repo
+  stages it.
 
-Game paths are overridable:
+Never have both on one machine: a Debug copy in `scripts\` plus an installed copy in `plugins\` loads
+the plugin twice.
 
-```
-dotnet build PtcglLeaderboard.csproj /p:GameRoot="D:\path\to\Pokemon Trading Card Game Live"
-```
-
-## Previewing the UI without launching the game
-
-PTCGL takes about a minute to start, which makes iterating on the overlay inside the game painful.
+The leaderboard service:
 
 ```
-dotnet run --project Preview/Preview.csproj
+cd leaderboard
+node --test test.js          # 19 end-to-end tests against a real SQLite
+npx wrangler deploy
 ```
 
-writes two pages:
+The worker and database are named `prizetracker-leaderboard` for historical reasons. That name is
+the deployed URL, so don't rename it.
 
-- **`board.html`** — a 1920x1080 recreation of the PTCGL play field with the overlay drawn on top at
-  its real pixel size. The board state is a **real** mid-game position lifted from a PokeAI
-  self-play replay, with the real 60-card decklist and card ids resolved from the client's card
-  database (`Preview/fixture.json`). The board and the overlay are driven by the *same* snapshot
-  through the *same* Tracker, so what the panel claims can be checked against the board it is
-  describing. This is what answers the questions you otherwise need a full game launch for: is the
-  panel readable at 1080p, is it the right size, what does it cover.
-- **`preview.html`** — the panel alone across three scenarios (turn 1, mid game, late game).
+## Data
 
-Open either in a browser, or run a local server:
+| what | where |
+|---|---|
+| match history, avatar cache, player-id backup | `%LOCALAPPDATA%\PtcglLeaderboard` |
+| settings (`ptcgl.leaderboard.cfg`) | `BepInEx\config` |
+| launcher, repair payload, manifest, repair log | `%LOCALAPPDATA%\PtcglLeaderboard` |
 
-```
-dotnet run --project Preview/Preview.csproj -- --serve
-```
-
-then visit **http://localhost:8080** (add a port number to use a different one, e.g. `--serve 8081`).
-Every request regenerates the pages, so editing `Preview/fixture.json` and hitting refresh is enough
-to see the change; only a C# edit needs a rebuild. It drives the **real** `Tracker` with hand-built match
-states (turn 1, mid game, late game) and renders the exact rows it produces, with real card art.
-
-What it does and does not prove:
-
-- the **data** is real — same Tracker, same accounting, ordering and probabilities as in game
-- the **pixels** are a mock — the overlay draws with Unity IMGUI, the preview with HTML/CSS
-
-So it is a design and content tool, not a pixel-accurate simulation. The preview's styling is kept
-to things IMGUI can also do (solid fills, rectangles, plain text) so a design that looks right there
-ports to the overlay. Card art in the preview comes from TCGdex URLs, because Unity asset bundles
-cannot be read outside the game.
-
-## Card art
-
-The overlay shows a grid of card art rather than a list of names — recognising a card by its picture
-is much faster mid-turn than reading text.
-
-Art is loaded from the client's **own asset bundles**: the game stores one bundle per card where the
-bundle name, bundle key and asset name are all the cardSourceID, so
-`AssetBundleManager.LoadAssetBundleAndAsset<Texture>(id, id, id, …)` fetches it. That means art is
-local, offline and always the correct printing.
-
-Loads are throttled, cached, and every failure is remembered so a missing bundle is attempted once
-rather than every frame. **If art cannot be loaded the tile falls back to the card's name**, so the
-overlay stays fully usable either way.
-
-## Tests
-
-The accounting and prize maths are pure logic and are covered offline. The test project *links* the
-real `Core` sources rather than re-implementing them, and drives them with hand-built board
-snapshots.
-
-```
-dotnet build Tests/TrackerTests.csproj
-Tests\bin\Debug\net472\TrackerTests.exe
-```
-
-Covers the hypergeometric core against known reference values, provably-prized deduction, revealed
-prizes, the decklist mismatch guard, and opponent reveal counting across zone moves.
-
-## Note on the old plugin
-
-An earlier combined plugin (`GameStateReader.dll`, plugin GUID `PrizeChecker`) carried both an early
-version of this tracker and the PokeAI data-export tooling. It must not run alongside this one, or
-you get two overlays. It is disabled by renaming it to `GameStateReader.dll.disabled` in
-`BepInEx\plugins` — BepInEx only scans `*.dll`, including subdirectories, so renaming the extension
-is the way to disable it (moving it to a subfolder does not work).
-
-Rebuilding the GameStateReader project will copy it back into `plugins` and re-enable it.
+Player data deliberately lives outside the game folder, because a PTCGL update can wipe the game
+folder. Uninstalling removes the mod's own files and keeps your match history.
