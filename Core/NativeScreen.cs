@@ -199,19 +199,41 @@ namespace PrizeTracker.Core
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 130f, RowGap = 8f;
 
-        // A row reads as five things in a line: our sleeve, our result, the opponent's portrait,
-        // who they were, and when. Each text block is CENTRED on its own column rather than
-        // left-aligned inside it - a left-aligned block of short text in a wide box puts all its
-        // slack on one side, which is what left a hole in the middle of every row once the
-        // add-friend button was taken out.
+        // A row is three GROUPS: our deck (sleeve + result), the opponent (portrait + name), and
+        // when it was + what you can do with it. Inside a group the art sits hard against the
+        // text it belongs to - a portrait a couple of hundred units from the name beside it reads
+        // as two unrelated things - and the groups are separated by a gap several times larger,
+        // so the grouping is the first thing the eye picks up.
         //
-        // The columns are spaced so the two gaps either side of the portrait come out equal
-        // (BlockW/2 + 69 either way), so the row is symmetrical about it.
-        private const float BlockW = 520f;
-        private const float MineCx = 400f;          // 140..660
-        private const float AvatarCx = 790f, AvatarSize = RowH - 8f;   // 729..851
-        private const float OppCx = 1180f;          // 920..1440
+        // Everything here is DERIVED, the gap between groups included: it is whatever is left
+        // once the content is placed, split evenly. Changing any width rebalances the row rather
+        // than silently opening a hole somewhere, which is how the previous two attempts went
+        // wrong - each was a set of hand-picked positions that stopped adding up the moment
+        // anything either side of them moved.
+        private const float ArtGap = 24f;            // art to the text it belongs to
+
+        // The right-hand group, pinned to the row's right edge: a list's actions belong there.
+        private const float RowRight = RowW - 20f;                    // 2080
+        private const float LogW = 170f, DeckW = 190f, BtnGap = 18f;
+        private const float LogRight = RowRight;                      // 1910..2080
+        private const float DeckRight = LogRight - LogW - BtnGap;     // 1702..1892
         private const float WhenW = 190f;
+        private const float WhenRight = DeckRight - DeckW - ArtGap;   // 1488..1678
+        private const float WhenLeft = WhenRight - WhenW;
+
+        // Our group, pinned left behind the result bar.
+        private const float SleeveX = 40f, SleeveW = 76f, SleeveH = 106f;
+        private const float MineX = SleeveX + SleeveW + ArtGap;       // 140
+        private const float MineW = 400f;
+
+        // The opponent's group, floated between the two by the leftover space.
+        private const float AvatarSize = RowH - 8f;                   // 122
+        private const float OppW = 400f;
+        private const float ClusterGap =
+            (WhenLeft - (MineX + MineW) - (AvatarSize + ArtGap + OppW)) / 2f;
+        private const float AvatarX = MineX + MineW + ClusterGap;
+        private const float AvatarCx = AvatarX + AvatarSize / 2f;
+        private const float OppX = AvatarX + AvatarSize + ArtGap;
 
         // The rows area is 1040 tall and a row occupies 138 with its gap, so seven fit. The eighth
         // would overhang the panel, which is what the paging strip below exists to avoid.
@@ -345,52 +367,47 @@ namespace PrizeTracker.Core
             // something rather than going blank.
             var thumb = !string.IsNullOrEmpty(m.Sleeve) ? m.Sleeve
                       : !string.IsNullOrEmpty(m.CoverCard) ? m.CoverCard : null;
-            Art(row, thumb, 74, 0, 76, 106, false, isItem: !string.IsNullOrEmpty(m.Sleeve));
+            Art(row, thumb, SleeveX + SleeveW / 2f, 0, SleeveW, SleeveH, false,
+                isItem: !string.IsNullOrEmpty(m.Sleeve));
 
-            var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.Center);
+            // Left-aligned, not centred. Centring started every row's WIN/LOSS at a different x,
+            // so the column went ragged and the result - the one thing a history is scanned for -
+            // stopped lining up down the list.
+            var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.MidlineLeft);
             head.richText = true;
             head.text = "<color=#" + ColorUtility.ToHtmlStringRGB(accent) + "><b>" +
                         (m.Won ? "WIN" : "LOSS") + "</b></color>   " + Esc(m.MyDeck);
-            Place(head.rectTransform, 0, 0.5f, 0.5f, 0.5f, MineCx, 18, BlockW, 44);
+            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, MineX, 18, MineW, 44);
 
             var meta = GameArt.Label("Text_Regular", row, Meta(m), 26, InkDim,
-                                     TextAlignmentOptions.Center);
-            Place(meta.rectTransform, 0, 0.5f, 0.5f, 0.5f, MineCx, -22, BlockW, 36);
+                                     TextAlignmentOptions.MidlineLeft);
+            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, MineX, -22, MineW, 36);
 
             // Opponent avatar: same circular framing as before, at full row height.
             Art(row, AvatarKey(m), AvatarCx, 0, AvatarSize, AvatarSize, false, true);
 
-            // The two buttons stay pinned to the row's right edge, which is where a list's actions
-            // belong, and the timestamp sits immediately left of them. Placed by their RIGHT edge
-            // (pivot 1) so the group cannot drift as widths change. The timestamp's gap has to be
-            // measured from the NEXT thing's LEFT edge - measuring it from VIEW DECK's right edge
-            // once put the timestamp inside the button, so it vanished rather than overlapped.
-            const float rowRight = RowW - 20f;                 // 2080
-            const float logW = 170f, deckW = 190f, btnGap = 18f;
-            const float logRight = rowRight;                   // 1910..2080
-            const float deckRight = logRight - logW - btnGap;   // 1702..1892
-            const float whenRight = deckRight - deckW - 24f;    // 1488..1678
-
+            // Name only, on one line, centred against the portrait. The archetype line that used
+            // to sit under it was inferred from whichever of their cards happened to be played,
+            // and the real answer is one click away in VIEW DECK.
             var oppName = GameArt.Label("Text_Medium", row,
                                         string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 34, Ink,
-                                        TextAlignmentOptions.Center);
-            Place(oppName.rectTransform, 0, 0.5f, 0.5f, 0.5f, OppCx, 18, BlockW, 44);
+                                        TextAlignmentOptions.MidlineLeft);
+            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, OppX, 0, OppW, 44);
 
-            var oppDeck = GameArt.Label("Text_Regular", row,
-                                        string.IsNullOrEmpty(m.OppArchetype) ? "unknown deck" : m.OppArchetype,
-                                        26, InkDim, TextAlignmentOptions.Center);
-            Place(oppDeck.rectTransform, 0, 0.5f, 0.5f, 0.5f, OppCx, -22, BlockW, 36);
-
+            // Placed by its RIGHT edge so it cannot drift into VIEW DECK as widths change. The gap
+            // has to be measured from the NEXT thing's LEFT edge - measuring it from VIEW DECK's
+            // right edge once put the timestamp inside the button, so it vanished entirely rather
+            // than merely overlapping.
             var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
                                      TextAlignmentOptions.MidlineRight);
-            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, whenRight, 0, WhenW, 40);
+            Place(when.rectTransform, 0, 0.5f, 1, 0.5f, WhenRight, 0, WhenW, 40);
 
             bool hasCards = m.OppCardsSeen() > 0;
-            Button(row, "VIEW DECK", deckRight, deckW, true, hasCards, () => OpenDeck(m));
+            Button(row, "VIEW DECK", DeckRight, DeckW, true, hasCards, () => OpenDeck(m));
 
             bool hasLog = !string.IsNullOrEmpty(m.Log);
             TextMeshProUGUI logLabel = null;
-            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", logRight, logW, false, hasLog, () =>
+            logLabel = Button(row, hasLog ? "COPY LOG" : "NO LOG", LogRight, LogW, false, hasLog, () =>
             {
                 try
                 {
@@ -401,39 +418,7 @@ namespace PrizeTracker.Core
                 catch (Exception e) { Plugin.Log.LogWarning("copy failed: " + e.Message); }
             });
 
-            if (!_loggedRow)
-            {
-                _loggedRow = true;
-                DumpLabel("head", head);
-                DumpLabel("meta", meta);
-                DumpLabel("oppName", oppName);
-                DumpLabel("oppDeck", oppDeck);
-                DumpLabel("when", when);
-            }
-
             y += RowH + RowGap;
-        }
-
-        private static bool _loggedRow;
-
-        /// <summary>
-        /// What a row label actually IS, once. Three separate rounds have now been spent guessing
-        /// why a label is not on screen - font, material, position - when the object itself can
-        /// simply be asked.
-        /// </summary>
-        private static void DumpLabel(string name, TextMeshProUGUI l)
-        {
-            if (l == null) { Plugin.Log.LogWarning("row label " + name + ": NULL"); return; }
-            var rt = l.rectTransform;
-            Plugin.Log.LogWarning("row label " + name + ": \"" + (l.text ?? "") + "\"" +
-                " active=" + l.gameObject.activeInHierarchy + " enabled=" + l.enabled +
-                " color=" + l.color + " size=" + l.fontSize +
-                " font=" + (l.font != null ? l.font.name : "null") +
-                " mat=" + (l.fontSharedMaterial != null ? l.fontSharedMaterial.name : "null") +
-                " pos=" + rt.anchoredPosition + " rect=" + rt.rect.size +
-                " scale=" + rt.localScale + " alpha=" + l.alpha +
-                " crAlpha=" + (l.canvasRenderer != null ? l.canvasRenderer.GetAlpha().ToString("0.00") : "?") +
-                " cg=" + (l.GetComponent<CanvasGroup>() != null));
         }
 
         /// <summary>
