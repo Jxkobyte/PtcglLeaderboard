@@ -316,3 +316,29 @@ test('cleanOutfit refuses anything it would not want to hand to every client', (
   const extra = cleanOutfit('{"look":2,"items":{"1":"a"},"evil":"drop table"}');
   assert.deepEqual(JSON.parse(extra), { look: 2, items: { '1': 'a' } });
 });
+
+test('a new season starts with the sample players and none of the real ones', async () => {
+  const e = env(), c = clock();
+  // season 54: a real player and a sample player
+  assert.equal((await post(e, c, base)).status, 200);
+  await e.DB.prepare("INSERT INTO standing (season_id, player_id, display_name, exp, wins, losses, " +
+    "season_matches, consecutive_wins, elo, master, snapshots, first_seen, last_seen, flags) " +
+    "VALUES (54, 'p-demo0001', 'Professor Oak', 900, 30, 10, 40, 0, 1700, 1, 3, 1, 1, '[]')").run();
+
+  // the first submission of season 55 registers it
+  c.t += 3600;
+  const s55 = { ...base, playerId: 'player-bbbbbbbb', displayName: 'New', seasonId: 55,
+                exp: 10, wins: 1, losses: 0, seasonMatches: 1, localMatches: 1, elo: 1400,
+                endDate: '2027-01-01T17:00:00Z' };
+  assert.equal((await post(e, c, s55)).status, 200);
+
+  const board = await get(e, c, '/v1/leaderboard?season=55');
+  const names = board.body.players.map(p => p.displayName).sort();
+  assert.deepEqual(names, ['New', 'Professor Oak']);          // Jakobi's season-54 row did not carry over
+  const oak = board.body.players.find(p => p.displayName === 'Professor Oak');
+  assert.equal(oak.elo, 1700);
+
+  // and season 54 is untouched
+  const old = await get(e, c, '/v1/leaderboard?season=54');
+  assert.deepEqual(old.body.players.map(p => p.displayName).sort(), ['Jakobi', 'Professor Oak']);
+});

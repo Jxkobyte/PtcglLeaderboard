@@ -118,6 +118,18 @@ async function postSnapshot(request, env, now) {
             s.consecutiveWins, s.elo, s.master, snapshots, firstSeen, t, JSON.stringify(unionFlags),
             s.outfit),
   ];
+  // A new season starts with the sample players on it, copied from the season before. The
+  // Professor rows (player ids p-demo*) are placeholders so the board is never empty; without
+  // this they existed for one season only and every reset opened on a blank board. Real players'
+  // rows are never copied - a reset is a reset.
+  if (latestId != null && s.seasonId > latestId) {
+    writes.push(env.DB.prepare(
+      'INSERT OR IGNORE INTO standing (season_id, player_id, display_name, exp, wins, losses, ' +
+      'season_matches, consecutive_wins, elo, master, snapshots, first_seen, last_seen, flags, outfit) ' +
+      "SELECT ?, player_id, display_name, exp, wins, losses, season_matches, consecutive_wins, elo, " +
+      "master, snapshots, ?, ?, '[]', outfit FROM standing WHERE season_id = ? AND player_id LIKE 'p-demo%'")
+      .bind(s.seasonId, t, t, latestId));
+  }
   if (s.endDate) {
     writes.push(env.DB.prepare(
       'INSERT INTO season_vote (season_id, player_id, end_date) VALUES (?, ?, ?) ' +
