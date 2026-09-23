@@ -4,7 +4,7 @@ using System.Reflection;
 using BepInEx.Bootstrap;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Turns ScriptEngine's auto-reload on from inside the game, and holds a reload back until a

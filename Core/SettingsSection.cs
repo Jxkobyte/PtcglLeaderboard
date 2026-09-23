@@ -5,10 +5,10 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
-    /// Adds a PRIZE TRACKER card to the game's own Settings screen, alongside SOUND / VIDEO
+    /// Adds a LEADERBOARD & MATCH HISTORY card to the game's own Settings screen, alongside SOUND / VIDEO
     /// OPTIONS / LANGUAGE, carrying exactly one control: whether the mod is on.
     ///
     /// That is the whole of the mod's settings. Sharing the season record is simply part of
@@ -28,7 +28,7 @@ namespace PrizeTracker.Core
     /// </summary>
     internal class SettingsSection : MonoBehaviour
     {
-        private const string SectionName = "PrizeTrackerSettings";
+        private const string SectionName = "PtcglLeaderboardSettings";
 
         /// <summary>Read and write the one setting. Wired by Plugin, which owns the config.</summary>
         public Func<bool> IsEnabled;
@@ -130,7 +130,7 @@ namespace PrizeTracker.Core
             // LocText would rewrite our heading back to the original on the next refresh.
             foreach (var c in title.GetComponents<MonoBehaviour>())
                 if (c != null && !(c is TextMeshProUGUI)) UnityEngine.Object.Destroy(c);
-            title.text = "PRIZE TRACKER";
+            title.text = "LEADERBOARD & MATCH HISTORY";
 
             var panel = title.transform.parent != null ? title.transform.parent : copy.transform;
             BuildRow(copy.transform as RectTransform, panel, title);

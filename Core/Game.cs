@@ -4,7 +4,7 @@ using MatchLogic;
 using SharedSDKUtils;
 using ML = MatchLogic;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Thin, exception-safe accessors for the live client's real match state.

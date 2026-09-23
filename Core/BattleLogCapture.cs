@@ -6,7 +6,7 @@ using System.Reflection;
 using UnityEngine;
 using _Rainier.Scripts.BattleLog;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Captures the client's own battle log for a match, so a finished match can hand you the same

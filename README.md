@@ -1,4 +1,4 @@
-# PTCGL Prize Tracker
+# PTCGL Leaderboard & Match History
 
 A BepInEx overlay for Pokémon TCG Live: prize tracking, deck tracking, opponent tracking, and a
 frame-rate limiter.
@@ -56,7 +56,7 @@ behaviour is only taken over when there is a real background cap to enforce.
 | F3 | reload the active decklist |
 | F4 | import a decklist from the clipboard (fallback) |
 
-Settings persist to `BepInEx/config/ptcgl.prizetracker.cfg` (window position/size, frame caps) and
+Settings persist to `BepInEx/config/ptcgl.leaderboard.cfg` (window position/size, frame caps) and
 the caps can also be changed in the overlay's **SET** tab.
 
 ## Build
@@ -65,7 +65,7 @@ Requires the .NET SDK and a local PTCGL install. No Visual Studio needed — the
 assemblies come from NuGet.
 
 ```
-dotnet build PrizeTracker.csproj
+dotnet build PtcglLeaderboard.csproj
 ```
 
 The plugin is copied into `BepInEx\plugins` automatically. **Close PTCGL first** — a running client
@@ -75,7 +75,7 @@ build. BepInEx only loads plugins at startup, so restart the game after a rebuil
 Game paths are overridable:
 
 ```
-dotnet build PrizeTracker.csproj /p:GameRoot="D:\path\to\Pokemon Trading Card Game Live"
+dotnet build PtcglLeaderboard.csproj /p:GameRoot="D:\path\to\Pokemon Trading Card Game Live"
 ```
 
 ## Previewing the UI without launching the game

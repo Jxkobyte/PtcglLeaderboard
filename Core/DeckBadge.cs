@@ -5,7 +5,7 @@ using TMPro;
 using TPCI.Rainier.Features.DeckManager;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Draws each deck's win/loss record onto the game's own deck tiles, in the deck screen.
@@ -23,7 +23,7 @@ namespace PrizeTracker.Core
     /// </summary>
     internal static class DeckBadge
     {
-        private const string BadgeName = "PrizeTrackerWinrate";
+        private const string BadgeName = "PtcglLeaderboardWinrate";
 
         public static MatchHistory History;
         public static bool Enabled = true;

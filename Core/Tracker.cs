@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SharedSDKUtils;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>One line of the opponent's cards - a card, and how many of it we have seen.</summary>
     internal class OppRow

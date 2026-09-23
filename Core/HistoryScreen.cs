@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// The match history screen, built as real Unity UI so it sits in the game's own canvas and
@@ -86,7 +86,7 @@ namespace PrizeTracker.Core
             // happened to own the label we cloned. It did open last time - the log recorded it -
             // but it lived under the "ItemSelect" canvas, so navigating to another screen took our
             // panel away with it.
-            var host = new GameObject("PrizeTrackerHistoryCanvas");
+            var host = new GameObject("PtcglLeaderboardHistoryCanvas");
             UnityEngine.Object.DontDestroyOnLoad(host);
 
             var ownCanvas = host.AddComponent<Canvas>();
@@ -100,7 +100,7 @@ namespace PrizeTracker.Core
 
             host.AddComponent<GraphicRaycaster>();
 
-            _root = NewRect("PrizeTrackerHistoryScreen", host.transform, Bg);
+            _root = NewRect("PtcglLeaderboardHistoryScreen", host.transform, Bg);
 
             // Leave the top bar uncovered. A full-screen backdrop with a raycaster swallowed every
             // click aimed at the nav bar, so you could open this screen but not navigate away from

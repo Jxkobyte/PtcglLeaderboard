@@ -2,7 +2,7 @@
 using System.Linq;
 using MatchLogic;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>One card as the client currently sees it. Unknown cards are server-redacted.</summary>
     internal class CardRef

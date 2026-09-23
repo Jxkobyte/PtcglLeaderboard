@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Drives the tracker: notices when a match starts/ends, loads the decklist we queued with,

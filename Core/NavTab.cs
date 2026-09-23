@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Adds a "MATCH HISTORY" tab to the game's own top navigation bar, next to DECKS.
@@ -24,7 +24,7 @@ namespace PrizeTracker.Core
     {
         // One instance per tab. Defaults are the original Match History tab; the leaderboard sets
         // its own name, caption and position.
-        public string TabName = "PrizeTrackerHistoryTab";
+        public string TabName = "PtcglLeaderboardHistoryTab";
         public string Caption = "MATCH HISTORY";
 
         /// <summary>
@@ -428,7 +428,7 @@ namespace PrizeTracker.Core
             int after = -1;
             foreach (Transform sib in container)
             {
-                if (sib.name.StartsWith("PrizeTracker", StringComparison.Ordinal)) continue;
+                if (sib.name.StartsWith("PtcglLeaderboard", StringComparison.Ordinal)) continue;
                 var lbl = sib.GetComponentInChildren<TextMeshProUGUI>(true);
                 if (lbl == null) continue;
                 if (string.Equals((lbl.text ?? "").Trim(), InsertAfter, StringComparison.OrdinalIgnoreCase))

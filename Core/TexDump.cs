@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Saves a texture to disk, once per name.
@@ -36,7 +36,7 @@ namespace PrizeTracker.Core
                 flat.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
                 flat.Apply();
 
-                var dir = Path.Combine(BepInEx.Paths.ConfigPath, "PrizeTracker/debug");
+                var dir = Path.Combine(BepInEx.Paths.ConfigPath, "PtcglLeaderboard/debug");
                 Directory.CreateDirectory(dir);
 
                 // Resolved by name: UnityEngine.ImageConversionModule targets netstandard2.1 and

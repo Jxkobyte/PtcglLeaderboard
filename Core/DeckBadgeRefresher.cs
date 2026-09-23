@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Keeps the deck tiles' win/loss badges current.

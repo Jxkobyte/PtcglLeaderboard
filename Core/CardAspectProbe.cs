@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Asks the CLIENT what shape a card texture is meant to be drawn at.
@@ -96,7 +96,7 @@ namespace PrizeTracker.Core
         private static bool Owned(Transform t)
         {
             for (var x = t; x != null; x = x.parent)
-                if (x.name.StartsWith("PrizeTracker", StringComparison.Ordinal) ||
+                if (x.name.StartsWith("PtcglLeaderboard", StringComparison.Ordinal) ||
                     x.name == "DeckModal") return true;
             return false;
         }

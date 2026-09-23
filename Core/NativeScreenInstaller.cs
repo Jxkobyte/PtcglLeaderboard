@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Registers the Match History screen with the client's own menu navigation, and makes the
@@ -41,7 +41,7 @@ namespace PrizeTracker.Core
         public NavTab Tab;
 
         /// <summary>GameObject name for the screen, also used by Plugin.OnDestroy to clean up.</summary>
-        public string ScreenName = "PrizeTrackerMatchHistoryScreen";
+        public string ScreenName = "PtcglLeaderboardMatchHistoryScreen";
 
         /// <summary>Short name for log lines.</summary>
         public string Label = "history";

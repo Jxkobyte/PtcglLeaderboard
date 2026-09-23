@@ -5,7 +5,7 @@ using RainierClientSDK.Inventory;
 using SharedLogicUtils.DataTypes;
 using SharedSDKUtils;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// A player's avatar, as something small enough to put on a leaderboard.

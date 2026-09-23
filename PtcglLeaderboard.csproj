@@ -1,16 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    PTCGL Prize Tracker - a standalone BepInEx overlay.
+    PTCGL Leaderboard and Match History - a standalone BepInEx plugin.
 
-    Deliberately independent of the PokeAI work: this project contains no card/game-data export,
-    no bulk card fetching and no simulator tooling. It only reads the live match state to show
-    prize / deck / opponent information. Keep it that way.
+    It records the result of each match and adds two screens to the client's own UI: a history
+    of your matches, and a community leaderboard built from the game's own season record.
+
+    It draws NOTHING during a match and reads nothing beyond match start/end. Prize, deck and
+    opponent tracking were all removed, deliberately: there is no in-match advantage left to
+    argue about, and that is the whole trust story. Do not reintroduce a live overlay.
+
+    Deliberately independent of the PokeAI work: no card/game-data export, no bulk card fetching
+    and no simulator tooling. Keep it that way.
   -->
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
-    <AssemblyName>PrizeTracker</AssemblyName>
-    <RootNamespace>PrizeTracker</RootNamespace>
+    <AssemblyName>PtcglLeaderboard</AssemblyName>
+    <RootNamespace>PtcglLeaderboard</RootNamespace>
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -33,10 +39,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Tests\**" />
-    <Compile Remove="Preview\**" />
-    <None Remove="Tests\**" />
-    <None Remove="Preview\**" />
+    <!-- Tests\ and Preview\ are gone: both existed only for prize tracking and were already
+         broken at HEAD after it was removed. Launcher\ is a separate exe, built on its own. -->
+    <Compile Remove="Launcher\**" />
+    <None Remove="Launcher\**" />
   </ItemGroup>
 
   <ItemGroup>

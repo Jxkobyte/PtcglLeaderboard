@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 using RainierClientSDK.source.SeasonRank;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     internal class BoardRow
     {
@@ -381,7 +381,7 @@ namespace PrizeTracker.Core
                     req.Method = method;
                     req.Timeout = 10000;
                     req.ReadWriteTimeout = 10000;
-                    req.UserAgent = "PrizeTracker/1.0";
+                    req.UserAgent = "PtcglLeaderboard/1.0";
                     req.Accept = "application/json";
                     if (body != null)
                     {

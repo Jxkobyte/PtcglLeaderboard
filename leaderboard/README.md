@@ -31,10 +31,12 @@ npx wrangler login
 npx wrangler d1 create prizetracker-leaderboard        # paste the id into wrangler.toml
 npx wrangler d1 execute prizetracker-leaderboard --remote --file=schema.sql
 npx wrangler deploy                                     # prints the workers.dev URL
+# The worker and database keep the original "prizetracker" name: it is the deployed URL
+# (https://prizetracker-leaderboard.jakobi832.workers.dev) and renaming it breaks every install.
 ```
 
 Then set that URL as `Server` under `[Leaderboard]` in
-`BepInEx/config/ptcgl.prizetracker.cfg`. Players opt in from the in-game Settings card; the
+`BepInEx/config/ptcgl.leaderboard.cfg`. Players opt in from the in-game Settings card; the
 board itself is viewable without opting in.
 
 ## Free-tier budget

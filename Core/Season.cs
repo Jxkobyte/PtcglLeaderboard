@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using Newtonsoft.Json.Linq;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// The current ranked season: its id, when it ends, and the league/rank ladder - read from the

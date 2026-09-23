@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Live-reloaded numbers, so laying things out does not cost a rebuild and a restart.
@@ -30,7 +30,7 @@ namespace PrizeTracker.Core
 
         public static string Path
         {
-            get { return System.IO.Path.Combine(BepInEx.Paths.ConfigPath, "PrizeTracker/tuning.txt"); }
+            get { return System.IO.Path.Combine(BepInEx.Paths.ConfigPath, "PtcglLeaderboard/tuning.txt"); }
         }
 
         /// <summary>A tunable number. The default is remembered so the file can be regenerated.</summary>
@@ -89,7 +89,7 @@ namespace PrizeTracker.Core
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
                 var lines = new List<string>
                 {
-                    "# PrizeTracker live tuning. Save this file and the game picks it up within a second.",
+                    "# PtcglLeaderboard live tuning. Save this file and the game picks it up within a second.",
                     "# Delete a line to go back to its default. Deleting the file rewrites it.",
                     "",
                 };

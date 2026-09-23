@@ -8,7 +8,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// One-shot structural dump of the game's own menu system, written to a file.
@@ -51,7 +51,7 @@ namespace PrizeTracker.Core
         private void Run(MainMenuNavigation nav)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("PrizeTracker menu probe  " + DateTime.Now);
+            sb.AppendLine("PtcglLeaderboard menu probe  " + DateTime.Now);
             sb.AppendLine(new string('=', 100));
 
             // ---- 1. navigation ------------------------------------------------
@@ -123,7 +123,7 @@ namespace PrizeTracker.Core
             }
 
             var path = System.IO.Path.Combine(
-                BepInEx.Paths.ConfigPath, "PrizeTracker", "probe.txt");
+                BepInEx.Paths.ConfigPath, "PtcglLeaderboard", "probe.txt");
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
             File.WriteAllText(path, sb.ToString());
             Plugin.Log.LogWarning("menu probe written: " + path + " (" + sb.Length + " chars)");

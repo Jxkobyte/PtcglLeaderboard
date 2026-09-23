@@ -7,7 +7,7 @@ using MatchLogic;
 using SharedSDKUtils;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Turns a partial "cards we saw" list into a decklist on the clipboard.

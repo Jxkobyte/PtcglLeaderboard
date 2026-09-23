@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using TPCI.AssetBundleSystem;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Textures for a deck's CUSTOMISATION items - card sleeve, deck box, coin.
@@ -90,7 +90,7 @@ namespace PrizeTracker.Core
             {
                 load = mgr.LoadAssetBundle(new AssetBundleManager.LoadParams
                 {
-                    bundleKey = "PrizeTrackerItems",
+                    bundleKey = "PtcglLeaderboardItems",
                     bundleName = bundleName,
                     keepAlive = true,
                 });

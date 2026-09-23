@@ -5,7 +5,7 @@ using System.Linq;
 using TPCI.AssetBundleSystem;
 using UnityEngine;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Supplies card art to the overlay, cheapest source first.
