@@ -263,7 +263,11 @@ namespace PrizeTracker.Core
                     UnityEngine.Object.Destroy(c);
             cube.layer = layer;
             cube.transform.position = new Vector3(centre.x, feet - h * 0.5f, centre.z);
-            cube.transform.localScale = new Vector3(1.5f, h, 1.2f);
+            // Shallow on purpose. The camera sits above these blocks, so the deeper the block
+            // the more of its TOP face is in view - and the top face eats the front face, which
+            // is the one carrying the position numeral. At depth 1.2 third place had more top
+            // than front and its numeral had nowhere to sit.
+            cube.transform.localScale = new Vector3(2.0f, h, 0.7f);
 
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)
