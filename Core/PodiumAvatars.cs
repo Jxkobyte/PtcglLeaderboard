@@ -58,10 +58,11 @@ namespace PtcglLeaderboard.Core
         // player's own avatar has been put back - which would dress the player as the bot again.
         private static int _generation;
 
-        // Set once first place has been dressed. First place borrows the PLAYER's own avatar
-        // controller - the one the Home and Profile screens show - so only then is there
-        // anything of the player's to put back.
-        private static bool _playerDressed;
+        // Which places have been dressed, so Release puts back exactly those. All three borrow a
+        // controller the game itself uses - first place the PLAYER's (Home and Profile), second
+        // the OPPONENT's (the match intro), third the Learning Lab PROFESSOR's - and each has to be
+        // handed back the way the game expects to find it.
+        private static readonly bool[] _dressed = new bool[Places];
 
         // The celebrations start in order - first place, two seconds, second, two seconds,
         // third - rather than all three at once, which read as a crowd rather than a podium.
@@ -206,7 +207,7 @@ namespace PtcglLeaderboard.Core
             int gen = _generation;
             while (_loading) { yield return null; if (gen != _generation) { HandOn(place); yield break; } }
             _loading = true;
-            if (place == 0) _playerDressed = true;
+            _dressed[place] = true;
             try
             {
                 var m = Mgr;
@@ -678,6 +679,54 @@ namespace PtcglLeaderboard.Core
             _generation++;
             _loading = false;
             RestorePlayerAvatar();
+            ClearOpponentAvatar();
+            RestoreProfessorAvatar();
+        }
+
+        /// <summary>
+        /// Leave the opponent controller EMPTY rather than wearing a bot's outfit.
+        ///
+        /// A match loads the real opponent into it (VersusScreenController -> LoadOpponentAvatar),
+        /// but a leftover figure was visible for a moment at match start before that load replaced
+        /// it - a podium bot standing in as the opponent. Empty is what the game itself leaves
+        /// there after a match (AvatarManager.UnloadAvatar(false)); the controller's own unload is
+        /// used rather than the manager's, which also drops the controller's camera registration.
+        /// </summary>
+        private static void ClearOpponentAvatar()
+        {
+            if (!_dressed[1]) return;
+            _dressed[1] = false;
+            try
+            {
+                var ctrl = Controller(1);
+                if (ctrl == null) return;
+                ctrl.UnloadAvatar();
+                Plugin.Log.LogInfo("podium: cleared the opponent avatar");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("podium: could not clear the opponent avatar: " + e.Message); }
+        }
+
+        /// <summary>
+        /// Put the Learning Lab professor back. The lab never reloads him - it only checks that
+        /// he IS loaded - so emptying this controller would leave the lab without its professor.
+        /// Instead the bot's outfit (and any NPC half-state) is cleared and the game's own startup
+        /// load, AvatarManager.LoadLearningLabProfAvatar(), is run again.
+        /// </summary>
+        private static void RestoreProfessorAvatar()
+        {
+            if (!_dressed[2]) return;
+            _dressed[2] = false;
+            try
+            {
+                var mgr = Mgr;
+                var ctrl = Controller(2);
+                if (mgr == null || ctrl == null) return;
+                ctrl.UnloadAvatar();
+                ctrl.UnloadNpc();
+                mgr.StartCoroutine(mgr.LoadLearningLabProfAvatar());
+                Plugin.Log.LogInfo("podium: restored the Learning Lab professor");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("podium: could not restore the professor: " + e.Message); }
         }
 
         /// <summary>
@@ -696,8 +745,8 @@ namespace PtcglLeaderboard.Core
         /// </summary>
         private static void RestorePlayerAvatar()
         {
-            if (!_playerDressed) return;
-            _playerDressed = false;
+            if (!_dressed[0]) return;
+            _dressed[0] = false;
             try
             {
                 var mgr = Mgr;
