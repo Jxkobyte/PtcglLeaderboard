@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// The community leaderboard, as a REAL screen in the client's own navigation - built the way
@@ -140,7 +140,11 @@ namespace PrizeTracker.Core
         // either end, rather than stacking a rule, a footer line and a paging line. Three strips
         // cost over 100 units of height for text that fits beside the buttons.
         private const float PagingH = 52f;
-        private const float PagingTop = PanelH - 34f - PagingH;
+        // The paging line is the bottom row of the panel: buttons, page label and the footer
+        // note all sit on ONE line, centred on the same height, just above the panel's edge.
+        private const float PagingTop = PanelH - 16f - PagingH;
+        private const float PagingMid = PagingTop + PagingH * 0.5f;   // from the top
+        private const float PagingUp = PanelH - PagingMid;              // the same line, from the bottom
         // No strip is reserved for your own row any more. Reserving one cost a row's height
         // on every page and sat empty whenever you were on the page - which is most of the
         // time - as a band of blank panel above the footer. When you are NOT on the page your
@@ -312,10 +316,10 @@ namespace PrizeTracker.Core
             // 325 either side of centre, so 340 is where text can start without running into
             // them.
             _foot = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 60, 780, 40);
+            NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0.5f, 80, PagingUp, 780, 40);
 
             _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
-            NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 1, 0, -PagingTop, 360, 40);
+            NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 0.5f, 0, -PagingMid, 360, 40);
             _pagePrev = PageButton(panel, "PREV", -190, () => { if (_pager.Move(-1, Total())) Populate(); });
             _pageNext = PageButton(panel, "NEXT", 190, () => { if (_pager.Move(+1, Total())) Populate(); });
         }

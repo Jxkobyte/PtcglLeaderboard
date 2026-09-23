@@ -7,7 +7,7 @@ using TPCI.Avatar;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Live 3D figures standing on real 3D blocks, built from the outfits the board carries.
@@ -111,10 +111,14 @@ namespace PrizeTracker.Core
             public RenderTexture OriginalTarget;
             public RenderTexture Ours;
             public GameObject Block;
+            public List<Renderer> Hidden = new List<Renderer>();   // the client's own floor decals, put back on Give
 
         }
 
         private static readonly Borrowed[] _held = new Borrowed[Places];
+
+        /// <summary>Tags a client renderer this podium switched off, so it is always put back.</summary>
+        private class PodiumHidden : MonoBehaviour { }
 
         private static AvatarManager Mgr
         {
@@ -300,7 +304,7 @@ namespace PrizeTracker.Core
                     mine.Framed = new Vector3(g.x, g.y + mine.CamY, g.z + mine.Side * mine.Dist);
                     if (mine.Block != null)
                         mine.Block.transform.position =
-                            new Vector3(g.x, g.y - mine.BlockH * 0.5f, g.z - mine.Side * BlockDepth * 0.5f);
+                            new Vector3(g.x, g.y - mine.BlockH * 0.5f, g.z - mine.Side * BlockDepth * BlockSetback);
                 }
                 if ((mine.Cam.transform.position - mine.Framed).sqrMagnitude > 0.0001f)
                     mine.Cam.transform.position = mine.Framed;
@@ -316,6 +320,10 @@ namespace PrizeTracker.Core
         // finishing it, and because the fade starts that far before the animation ends, it also
         // eats that much of the pose itself.
         private const float Blend = 0.15f;
+
+        // How far the block's centre sits behind the feet, as a fraction of its depth. 0.5
+        // puts the feet on the front edge; 0 centres them.
+        private const float BlockSetback = 0.15f;
         private static readonly int IdleHash = Animator.StringToHash("idle");
 
         private static bool IsIdle(Animator a)
@@ -425,14 +433,16 @@ namespace PrizeTracker.Core
                 // the figure behind it.
                 float side = Mathf.Abs(Mathf.DeltaAngle(cam.transform.eulerAngles.y, 0f)) < 90f ? -1f : 1f;
 
-                // The block is pushed AWAY from the camera by half its depth, so the figure ends
-                // up standing on the front edge of the top face rather than in the middle of it.
-                // Centred, the block's front-top edge sits nearer the camera than the feet do and
-                // therefore lower on screen - which read as the figure standing in a recess cut
-                // into the podium.
-                var blockAt = new Vector3(ground.x, ground.y, ground.z - side * BlockDepth * 0.5f);
+                // The block is pushed AWAY from the camera, but only a little: the figure stands
+                // a short way in from the front edge of the top face. Half the depth put the feet
+                // ON the edge, and the toes - which reach past the root - hung over it, so the
+                // figures looked half off their podiums. Dead centre went the other way: the
+                // front-top edge sat nearer the camera than the feet and therefore lower on
+                // screen, which read as a recess cut into the podium.
+                var blockAt = new Vector3(ground.x, ground.y, ground.z - side * BlockDepth * BlockSetback);
                 SweepStaleBlocks(layer);
                 held.Block = MakeBlock(layer, blockAt, feet, blockH, blockColour);
+                HideFloorDecals(held, layer);
 
 
                 // Frame the block AND the figure. Visible height at a perspective camera is
@@ -555,6 +565,43 @@ namespace PrizeTracker.Core
         /// changed with every reload as one more went on the pile. Blocks are the only thing we
         /// ever name PodiumBlock, so sweeping by name is safe and survives a reload.
         /// </summary>
+        /// <summary>
+        /// The client draws its own ground marker under the player's figure - a Poke Ball ring
+        /// on the floor - and on the gold block it showed through as a ghostly disc the figure
+        /// was standing in. Anything FLAT on this figure's layer that is not ours is that
+        /// marker (probed: "Avatar_Platform_Graphic", a MeshRenderer 1.1 x 0.00 x 1.1; the figure
+        /// itself is skinned meshes, and the block is the one thing we put there), so it is
+        /// switched off for as long as the block stands and switched back
+        /// on when the podium is handed back. Logged, so what was hidden can be checked.
+        /// </summary>
+        private static void HideFloorDecals(Borrowed held, int layer)
+        {
+            try
+            {
+                foreach (var r in UnityEngine.Object.FindObjectsOfType<Renderer>())
+                {
+                    if (r == null || r.gameObject.layer != layer) continue;
+                    if (!r.enabled && r.GetComponent<PodiumHidden>() == null) continue;   // the client's own doing
+                    if (r.gameObject.name == "PodiumBlock") continue;
+                    // The figure is skinned meshes - and a pair of glasses is only 5cm tall,
+                    // which the first version of this took for a decal and switched off.
+                    if (r is SkinnedMeshRenderer) continue;
+                    var b = r.bounds;
+                    if (b.size.y > 0.02f) continue;     // not flat: part of the figure
+                    // Marked, so that a hold torn down without Give() - a hot reload - leaves
+                    // something the NEXT hold can recognise as ours and put back. Without the
+                    // mark the decal stayed switched off, looked as if it had been hidden by
+                    // this sweep, and was skipped by it as "already off".
+                    if (r.GetComponent<PodiumHidden>() == null) r.gameObject.AddComponent<PodiumHidden>();
+                    r.enabled = false;
+                    held.Hidden.Add(r);
+                    Plugin.Log.LogInfo("podium: hid floor decal \"" + r.gameObject.name + "\" (" +
+                                       r.GetType().Name + ", size " + b.size.ToString("0.00") + ")");
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("podium: decal sweep failed: " + e.Message); }
+        }
+
         private static void SweepStaleBlocks(int layer)
         {
             int swept = 0;
@@ -585,6 +632,14 @@ namespace PrizeTracker.Core
                     held.Cam.targetTexture = held.OriginalTarget;
                 }
                 if (held.Block != null) UnityEngine.Object.Destroy(held.Block);
+                foreach (var r in held.Hidden)
+                {
+                    if (r == null) continue;
+                    r.enabled = true;
+                    var mark = r.GetComponent<PodiumHidden>();
+                    if (mark != null) UnityEngine.Object.Destroy(mark);
+                }
+                held.Hidden.Clear();
                 if (held.Ours != null) held.Ours.Release();
             }
             catch { }

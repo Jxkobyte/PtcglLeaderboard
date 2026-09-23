@@ -2,14 +2,14 @@
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
-using PrizeTracker.Core;
+using PtcglLeaderboard.Core;
 using System;
 using UnityEngine;
 
-namespace PrizeTracker
+namespace PtcglLeaderboard
 {
     /// <summary>
-    /// PTCGL Prize Tracker.
+    /// PTCGL Leaderboard & Match History.
     ///
     /// Standalone: this plugin does nothing except read the live match state and draw an overlay.
     /// It contains none of the PokeAI simulator tooling (card/game-data export, bulk card fetch)
@@ -22,8 +22,8 @@ namespace PrizeTracker
     [BepInPlugin(ID, NAME, VERSION)]
     public class Plugin : BaseUnityPlugin
     {
-        private const string ID = "ptcgl.prizetracker";
-        private const string NAME = "PTCGL Prize Tracker";
+        private const string ID = "ptcgl.leaderboard";
+        private const string NAME = "PTCGL Leaderboard & Match History";
         private const string VERSION = "1.0.0";
 
         internal static ManualLogSource Log;
@@ -55,7 +55,7 @@ namespace PrizeTracker
             Log = Logger;
             BindConfig();
 
-            _host = new GameObject("PrizeTracker_Systems");
+            _host = new GameObject("PtcglLeaderboard_Systems");
             DontDestroyOnLoad(_host);
             _host.hideFlags = HideFlags.HideAndDontSave;
 
@@ -64,7 +64,7 @@ namespace PrizeTracker
             Tracker.Diagnostic = msg => Log.LogWarning(msg);
 
             // Match log lives beside the plugin config so it survives game updates.
-            var historyPath = System.IO.Path.Combine(Paths.ConfigPath, "PrizeTracker", "matches.jsonl");
+            var historyPath = System.IO.Path.Combine(Paths.ConfigPath, "PtcglLeaderboard", "matches.jsonl");
             _history = new MatchHistory(historyPath);
             _history.Load();
             DeckBadge.History = _history;
@@ -81,7 +81,7 @@ namespace PrizeTracker
             // working - so the feature degrades rather than disappearing.
             var native = _historyNative = _host.AddComponent<NativeScreenInstaller>();
             native.Tab = nav;
-            native.ScreenName = "PrizeTrackerMatchHistoryScreen";
+            native.ScreenName = "PtcglLeaderboardMatchHistoryScreen";
             native.Label = "history";
             var history = _history;
             native.Attach = go =>
@@ -132,14 +132,14 @@ namespace PrizeTracker
             if (!string.IsNullOrEmpty(_cfgLbLearnedName.Value)) _board.SetLearnedName(_cfgLbLearnedName.Value);
 
             var lbTab = _lbTab = _host.AddComponent<NavTab>();
-            lbTab.TabName = "PrizeTrackerLeaderboardTab";
+            lbTab.TabName = "PtcglLeaderboardLeaderboardTab";
             lbTab.Caption = "LEADERBOARD";
             lbTab.InsertAfter = "CARD DEX";     // the end of the text tabs
             lbTab.History = _history;
 
             var lbNative = _lbNative = _host.AddComponent<NativeScreenInstaller>();
             lbNative.Tab = lbTab;
-            lbNative.ScreenName = "PrizeTrackerLeaderboardScreen";
+            lbNative.ScreenName = "PtcglLeaderboardLeaderboardScreen";
             lbNative.Label = "leaderboard";
             var board = _board; var season = _season;
             lbNative.Attach = go =>
@@ -189,7 +189,7 @@ namespace PrizeTracker
             _cfgLbLearnedName = Config.Bind("Leaderboard", "InGameName", "",
                 "Your in-game name, learned during a match. Managed automatically.");
             _cfgLbApi = Config.Bind("Leaderboard", "Server", "",
-                "Base URL of the leaderboard service, e.g. https://prizetracker-leaderboard.example.workers.dev");
+                "Base URL of the leaderboard service, e.g. https://ptcglleaderboard-leaderboard.example.workers.dev");
             _cfgLbPlayerId = Config.Bind("Leaderboard", "PlayerId", "",
                 "Random id identifying you on the leaderboard. Generated once. Not your account id.");
 
@@ -214,7 +214,7 @@ namespace PrizeTracker
             DeckBadge.Enabled = on;
             // Badges already painted onto deck tiles are not un-painted by the flag alone.
             if (on) DeckBadge.RefreshExisting();
-            else { try { DestroyAllNamed("PrizeTrackerWinrate"); } catch { } }
+            else { try { DestroyAllNamed("PtcglLeaderboardWinrate"); } catch { } }
 
             Log.LogInfo(on ? "enabled" : "disabled - only the Settings card stays on");
         }
@@ -251,19 +251,24 @@ namespace PrizeTracker
         /// </summary>
         private void OnDestroy()
         {
+            // Cameras back where they were, blocks gone, the client's floor decal switched back
+            // on. The screen's own OnDeactivate does this normally, but a hot reload tears the
+            // screen down without deactivating it.
+            try { PodiumAvatars.Release(null); } catch { }
+
             try { _harmony.UnpatchSelf(); }
             catch (Exception e) { Log.LogWarning("unpatch failed: " + e.Message); }
 
             foreach (var name in new[]
             {
-                "PrizeTrackerHistoryTab",          // clone in the client's top bar
-                "PrizeTrackerMatchHistoryScreen",  // screen under InactiveScreens
-                "PrizeTrackerSettings",            // card in the client's Settings screen
-                "PrizeTrackerHistoryCanvas",       // fallback overlay canvas
-                "PrizeTrackerSlotArt",             // art painted into prize slots (old approach)
-                "PrizeTrackerLeaderboardTab",      // second clone in the top bar
-                "PrizeTrackerLeaderboardScreen",   // its screen under InactiveScreens
-                "PrizeTrackerWinrate",             // win/loss labels cloned onto deck tiles
+                "PtcglLeaderboardHistoryTab",          // clone in the client's top bar
+                "PtcglLeaderboardMatchHistoryScreen",  // screen under InactiveScreens
+                "PtcglLeaderboardSettings",            // card in the client's Settings screen
+                "PtcglLeaderboardHistoryCanvas",       // fallback overlay canvas
+                "PtcglLeaderboardSlotArt",             // art painted into prize slots (old approach)
+                "PtcglLeaderboardLeaderboardTab",      // second clone in the top bar
+                "PtcglLeaderboardLeaderboardScreen",   // its screen under InactiveScreens
+                "PtcglLeaderboardWinrate",             // win/loss labels cloned onto deck tiles
             })
             {
                 try { DestroyAllNamed(name); } catch { }
