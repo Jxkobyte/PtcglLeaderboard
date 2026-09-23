@@ -154,7 +154,6 @@ namespace PrizeTracker
             _host.AddComponent<ItemArt>();   // serves sleeve/box/coin thumbnails
             _host.AddComponent<HotReload>(); // arms ScriptEngine's watcher so builds apply themselves
             _host.AddComponent<CardAspectProbe>(); // what shape does the CLIENT draw a card texture at
-            _host.AddComponent<AddFriendProbe>();   // how the CLIENT builds its own add-friend button
             _host.AddComponent<BattleLogCapture>();   // keeps each match's battle log text
             _host.AddComponent<Probe>();     // one-shot structural dump of the game's menu system
 

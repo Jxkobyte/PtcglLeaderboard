@@ -194,24 +194,23 @@ namespace PrizeTracker.Core
         private static readonly Color LossTint = new Color(0.820f, 0.133f, 0.149f, 0.16f);
         private static readonly Color Slate = new Color(0.227f, 0.247f, 0.278f, 1f);
 
-        // The end-of-match ADD FRIEND button, measured off the client's own results screen: a
-        // near-black plate with a slightly lighter band across the top half and near-white text.
-        private static readonly Color Charcoal = new Color(0.145f, 0.145f, 0.145f, 1f);   // 37,37,37
-        private static readonly Color CharcoalTop = new Color(0.192f, 0.192f, 0.192f, 1f); // 49,49,49
-        private static readonly Color OnCharcoal = new Color(0.925f, 0.925f, 0.925f, 1f);  // 236,236,236
         private static readonly Color Hairline = new Color(0f, 0f, 0f, 0.10f);
 
         private const float PanelW = 2260f, PanelH = 1240f;
         private const float RowW = 2100f, RowH = 130f, RowGap = 8f;
 
-        // ADD FRIEND sits immediately left of the opponent's portrait, so the button reads as
-        // belonging to that person rather than to the row's trailing button group. The portrait is
-        // centred at x=800 and RowH-8 wide, so it spans 739..861 - the button's right edge stops
-        // short of that, and our own deck text is narrowed to stop short of the button.
-        private const float AvatarCx = 800f, AvatarSize = RowH - 8f;
-        private const float AddW = 218f;
-        private const float AddRight = AvatarCx - AvatarSize / 2f - 10f;   // 511..729
-        private const float HeadW = AddRight - AddW - 130f - 18f;          // 130..493
+        // A row reads as five things in a line: our sleeve, our result, the opponent's portrait,
+        // who they were, and when. Each text block is CENTRED on its own column rather than
+        // left-aligned inside it - a left-aligned block of short text in a wide box puts all its
+        // slack on one side, which is what left a hole in the middle of every row once the
+        // add-friend button was taken out.
+        //
+        // The columns are spaced so the two gaps either side of the portrait come out equal
+        // (BlockW/2 + 69 either way), so the row is symmetrical about it.
+        private const float BlockW = 520f;
+        private const float MineCx = 400f;          // 140..660
+        private const float AvatarCx = 790f, AvatarSize = RowH - 8f;   // 729..851
+        private const float OppCx = 1180f;          // 920..1440
         private const float WhenW = 190f;
 
         // The rows area is 1040 tall and a row occupies 138 with its gap, so seven fit. The eighth
@@ -348,67 +347,43 @@ namespace PrizeTracker.Core
                       : !string.IsNullOrEmpty(m.CoverCard) ? m.CoverCard : null;
             Art(row, thumb, 74, 0, 76, 106, false, isItem: !string.IsNullOrEmpty(m.Sleeve));
 
-            var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.MidlineLeft);
+            var head = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.Center);
             head.richText = true;
             head.text = "<color=#" + ColorUtility.ToHtmlStringRGB(accent) + "><b>" +
                         (m.Won ? "WIN" : "LOSS") + "</b></color>   " + Esc(m.MyDeck);
-            Place(head.rectTransform, 0, 0.5f, 0, 0.5f, 130, 18, HeadW, 44);
+            Place(head.rectTransform, 0, 0.5f, 0.5f, 0.5f, MineCx, 18, BlockW, 44);
 
             var meta = GameArt.Label("Text_Regular", row, Meta(m), 26, InkDim,
-                                     TextAlignmentOptions.MidlineLeft);
-            Place(meta.rectTransform, 0, 0.5f, 0, 0.5f, 130, -22, HeadW, 36);
+                                     TextAlignmentOptions.Center);
+            Place(meta.rectTransform, 0, 0.5f, 0.5f, 0.5f, MineCx, -22, BlockW, 36);
 
             // Opponent avatar: same circular framing as before, at full row height.
             Art(row, AvatarKey(m), AvatarCx, 0, AvatarSize, AvatarSize, false, true);
 
-            // The right-hand side of a row, laid out as one strip so the pieces cannot run into
-            // each other. Buttons are placed by their RIGHT edge (pivot 1), the opponent block by
-            // its left, and the timestamp sits in the gap between them. The timestamp previously
-            // ended at 1478 while ADD FRIEND began at 1470, so "just now" was drawn under it.
+            // The two buttons stay pinned to the row's right edge, which is where a list's actions
+            // belong, and the timestamp sits immediately left of them. Placed by their RIGHT edge
+            // (pivot 1) so the group cannot drift as widths change. The timestamp's gap has to be
+            // measured from the NEXT thing's LEFT edge - measuring it from VIEW DECK's right edge
+            // once put the timestamp inside the button, so it vanished rather than overlapped.
             const float rowRight = RowW - 20f;                 // 2080
             const float logW = 170f, deckW = 190f, btnGap = 18f;
             const float logRight = rowRight;                   // 1910..2080
             const float deckRight = logRight - logW - btnGap;   // 1702..1892
-            // The timestamp is placed by its RIGHT edge, and the gap has to be measured from the
-            // NEXT thing's LEFT edge. Measuring it from VIEW DECK's right edge once put the
-            // timestamp inside the button, so it disappeared entirely rather than overlapping.
             const float whenRight = deckRight - deckW - 24f;    // 1488..1678
-            const float oppW = whenRight - WhenW - 896f - 20f;  // opponent block, clear of the time
 
             var oppName = GameArt.Label("Text_Medium", row,
                                         string.IsNullOrEmpty(m.Opponent) ? "-" : m.Opponent, 34, Ink,
-                                        TextAlignmentOptions.MidlineLeft);
-            Place(oppName.rectTransform, 0, 0.5f, 0, 0.5f, 896, 18, oppW, 44);
+                                        TextAlignmentOptions.Center);
+            Place(oppName.rectTransform, 0, 0.5f, 0.5f, 0.5f, OppCx, 18, BlockW, 44);
 
             var oppDeck = GameArt.Label("Text_Regular", row,
                                         string.IsNullOrEmpty(m.OppArchetype) ? "unknown deck" : m.OppArchetype,
-                                        26, InkDim, TextAlignmentOptions.MidlineLeft);
-            Place(oppDeck.rectTransform, 0, 0.5f, 0, 0.5f, 896, -22, oppW, 36);
+                                        26, InkDim, TextAlignmentOptions.Center);
+            Place(oppDeck.rectTransform, 0, 0.5f, 0.5f, 0.5f, OppCx, -22, BlockW, 36);
 
             var when = GameArt.Label("Text_Regular", row, Ago(m.WhenUtc), 26, InkDim,
                                      TextAlignmentOptions.MidlineRight);
             Place(when.rectTransform, 0, 0.5f, 1, 0.5f, whenRight, 0, WhenW, 40);
-
-            // ADD FRIEND, the same request the client's own end-of-match button sends.
-            //
-            // Already a friend, or no name recorded, leaves it visible but disabled rather than
-            // absent: a button that vanishes on some rows reads as a bug, while a dimmed one with
-            // "FRIENDS" on it answers the question being asked.
-            // The practice opponent is not a person to befriend. "AI" is the literal name the
-            // client records for a Test vs AI match, so it is treated as not-a-player rather than
-            // letting the request go out and fail.
-            bool named = !string.IsNullOrEmpty(m.Opponent) &&
-                         !m.Opponent.Equals("AI", StringComparison.OrdinalIgnoreCase);
-            bool friends = named && Friends.AlreadyFriends(m.Opponent);
-            TextMeshProUGUI addLabel = null;
-            addLabel = FriendButton(row, friends ? "FRIENDS" : "ADD FRIEND", AddRight, AddW,
-                                    named && !friends, () =>
-            {
-                // Explicit click only. This sends a real message to a real player.
-                Friends.Send(m.Opponent, (ok, why) =>
-                    StartCoroutine(Confirm(addLabel, ok ? "SENT!" : (why ?? "FAILED").ToUpperInvariant(),
-                                           "ADD FRIEND")));
-            });
 
             bool hasCards = m.OppCardsSeen() > 0;
             Button(row, "VIEW DECK", deckRight, deckW, true, hasCards, () => OpenDeck(m));
@@ -551,50 +526,6 @@ namespace PrizeTracker.Core
                 plate.SetAsFirstSibling();
             }
             return hrt;
-        }
-
-        /// <summary>
-        /// ADD FRIEND, built to match the button the client puts on its own end-of-match screen:
-        /// a near-black plate with a lighter band across the top, the client's own icn_addfriend
-        /// icon, and near-white upright text.
-        ///
-        /// It uses the client's icon sprite rather than a drawn one. The results-screen prefab is
-        /// only in memory during a match, so the button itself could not be read directly - but
-        /// its icon is an atlas sprite the rest of the UI shares, so the real thing was available
-        /// all along once the sprite table was searched for it instead of the prefab.
-        /// </summary>
-        private TextMeshProUGUI FriendButton(Transform row, string text, float x, float w,
-                                             bool enabled, Action onClick)
-        {
-            var plate = !enabled ? new Color(0.45f, 0.45f, 0.47f, 1f) : Charcoal;
-            var btn = Img("Btn", row, GameArt.Sprite("btn_Oct_16"), plate);
-            Place(btn, 0, 0.5f, 1, 0.5f, x, 0, w, 58);
-
-            // The lighter top band. It is inset by a couple of pixels so the plate's own rounded
-            // edge still reads as the outline, rather than the band squaring off the corners.
-            var top = Img("Top", btn, GameArt.Sprite("btn_Oct_16"),
-                          enabled ? CharcoalTop : new Color(0.52f, 0.52f, 0.54f, 1f));
-            Place(top, 0.5f, 1, 0.5f, 1, 0, -3, w - 6, 26);
-
-            var icon = Img("Icon", btn, GameArt.Sprite("icn_addfriend"),
-                           new Color(1f, 1f, 1f, enabled ? 1f : 0.55f));
-            Place(icon, 0, 0.5f, 0, 0.5f, 26, 0, 32, 32);
-
-            // The text is centred on the space LEFT of the icon, not on the whole plate, so it
-            // does not drift under the icon on the narrower "FRIENDS" and "SENT!" states.
-            var label = GameArt.Label("Text_Medium", btn, text,
-                                      new Color(OnCharcoal.r, OnCharcoal.g, OnCharcoal.b, enabled ? 1f : 0.7f),
-                                      TextAlignmentOptions.Center, 26);
-            Place(label.rectTransform, 0, 0.5f, 0.5f, 0.5f, 46 + (w - 46) / 2f, 0, w - 46, 40);
-            label.transform.SetAsLastSibling();
-
-            if (!enabled || onClick == null) return label;
-            var b = btn.gameObject.AddComponent<Button>();
-            var g = btn.GetComponent<Image>();
-            g.raycastTarget = true;
-            b.targetGraphic = g;
-            b.onClick.AddListener(() => onClick());
-            return label;
         }
 
         private TextMeshProUGUI Button(Transform row, string text, float x, float w, bool solid,
