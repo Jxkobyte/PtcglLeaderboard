@@ -90,6 +90,8 @@ namespace PrizeTracker.Core
         {
             public AvatarBaseController Ctrl;
             public Camera Cam;
+            public Transform Root;      // the figure's root: where it actually stands
+            public float Side, Dist, BlockH, CamY;   // to re-frame from wherever Root is now
             public Vector3 CamPos;      // where the client had it, to give back
             public Vector3 Framed;      // where we need it, to hold it there
             public float Fov;           // and at what field of view
@@ -254,6 +256,19 @@ namespace PrizeTracker.Core
             var mine = _held[place];
             while (target != null && mine != null && mine.Cam != null && _held[place] == mine)
             {
+                // Re-framed from wherever the root is NOW, every frame. The client relocates
+                // these figures on its own schedule - the male/female platform offset, its idle
+                // re-sync - and when it did, the figure slid sideways out of a block and camera
+                // that had stayed put. Following the root keeps all three together whoever
+                // moved it.
+                if (mine.Root != null)
+                {
+                    var g = mine.Root.position;
+                    mine.Framed = new Vector3(g.x, g.y + mine.CamY, g.z + mine.Side * mine.Dist);
+                    if (mine.Block != null)
+                        mine.Block.transform.position =
+                            new Vector3(g.x, g.y - mine.BlockH * 0.5f, g.z - mine.Side * BlockDepth * 0.5f);
+                }
                 if ((mine.Cam.transform.position - mine.Framed).sqrMagnitude > 0.0001f)
                     mine.Cam.transform.position = mine.Framed;
                 // The field of view has to be held as well: the distance was worked out FROM it,
@@ -356,12 +371,20 @@ namespace PrizeTracker.Core
                 var rends = ctrl.GetComponentsInChildren<Renderer>(true);
                 if (rends.Length == 0) return false;
                 int layer = rends[0].gameObject.layer;
-                var bounds = rends[0].bounds;
-                for (int i = 1; i < rends.Length; i++)
-                    if (rends[i] != null) bounds.Encapsulate(rends[i].bounds);
 
-                var ground = new Vector3(ctrl.transform.position.x, bounds.min.y,
-                                         ctrl.transform.position.z);
+                // Where the figure stands is read from its ROOT - the transform the animators
+                // drive, which a humanoid rig keeps on the ground plane under the character -
+                // and root motion is switched off so a pose cannot walk it away from there.
+                //
+                // Renderer bounds were the previous answer and they are wrong in both ways
+                // that showed: a skinned mesh's bounds are a loose box that can hang below the
+                // feet (a skirt did, and second place floated above her block), and a pose that
+                // steps sideways carries the root with it, so the figure drifted out of the
+                // picture and back.
+                var anims = Animators(ctrl);
+                foreach (var an in anims) if (an != null) an.applyRootMotion = false;
+                var root = anims.Length > 0 && anims[0] != null ? anims[0].transform : ctrl.transform;
+                var ground = root.position;
                 float feet = ground.y;
                 float head = feet + FigureHeight;
                 // Which side the camera looks from, kept as it was: the professor's camera faces
@@ -400,6 +423,11 @@ namespace PrizeTracker.Core
 
                 held.Framed = new Vector3(ground.x, (top + bottom) * 0.5f, ground.z + side * dist);
                 held.Fov = Fov;
+                held.Root = root;
+                held.Side = side;
+                held.Dist = dist;
+                held.BlockH = blockH;
+                held.CamY = (top + bottom) * 0.5f - feet;
                 cam.transform.position = held.Framed;
 
                 cam.gameObject.SetActive(true);

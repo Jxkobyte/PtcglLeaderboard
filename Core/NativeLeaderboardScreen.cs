@@ -37,6 +37,11 @@ namespace PrizeTracker.Core
         private static readonly Color RowB = new Color(0.985f, 0.987f, 0.990f, 1f);
         private static readonly Color Hairline = new Color(0f, 0f, 0f, 0.10f);
 
+        // The red the client uses for an active control - its ON toggles and selected buttons -
+        // and the light grey its checkboxes sit at when off.
+        private static readonly Color ClientRed = new Color(0.890f, 0.035f, 0.110f, 1f);
+        private static readonly Color BoxOff = new Color(0.905f, 0.905f, 0.905f, 1f);
+
         // A backdrop for the podium, and a floor for the blocks to stand on, so the three figures
         // read as being somewhere rather than cut out and pasted onto the panel.
         private static readonly Color StageBg = new Color(0.937f, 0.949f, 0.969f, 1f);
@@ -107,7 +112,7 @@ namespace PrizeTracker.Core
         // 664 rather than 584: five rows a column instead of six. The list was leaving a band
         // of empty panel above the paging strip, and the figures are framed by height, so the
         // band is the only thing that really sets how big they are. Ten players a page now.
-        private const float PodiumTop = 20f, PodiumH = 664f;
+        private const float PodiumTop = 20f, PodiumH = 650f;
 
         // The tallest place's picture, and the shape they are all drawn at. Everything else on
         // the podium is measured from these two.
@@ -142,8 +147,11 @@ namespace PrizeTracker.Core
         // cost over 100 units of height for text that fits beside the buttons.
         private const float PagingH = 52f;
         private const float PagingTop = PanelH - 34f - PagingH;
-        private const float PinnedTop = PagingTop - 16f - RowH;
-        private const float RowsSpace = PinnedTop - 8f - BodyTop;
+        // No strip is reserved for your own row any more. Reserving one cost a row's height
+        // on every page and sat empty whenever you were on the page - which is most of the
+        // time - as a band of blank panel above the footer. When you are NOT on the page your
+        // row takes the last slot of the right-hand column instead.
+        private const float RowsSpace = PagingTop - 16f - BodyTop;
         private const int VisibleRows = (int)((RowsSpace + RowGap) / (RowH + RowGap));
 
         // The plaque is 1024x288 in the client's own art, and hangs under the season line on
@@ -151,7 +159,9 @@ namespace PrizeTracker.Core
         // next set still sits where it should rather than being squashed to fit.
         private const float PlaqueW = 420f;
         private const float PlaqueH = PlaqueW * 288f / 1024f;
-        private const float PlaqueTop = 30f;
+        // The two corners share one inset and one top line, so the heading on the left and the
+        // plaque on the right sit level and equally far in from the backdrop's edges.
+        private const float HeadInset = 110f, HeadTopY = 36f;
 
         private bool _built;
         private RectTransform _plaque;
@@ -159,9 +169,8 @@ namespace PrizeTracker.Core
         private bool _plaqueLogged;
         private Transform _body, _podium;
         private readonly List<GameObject> _podiumArt = new List<GameObject>();
-        private RectTransform _pinned;
         private TextMeshProUGUI _subtitle, _foot, _status, _empty;
-        private RectTransform _shareTick;
+        private RectTransform _shareTick, _shareBox;
         private readonly List<GameObject> _rows = new List<GameObject>();
         private BoardState _rendered;
         private float _nextTick;
@@ -242,21 +251,23 @@ namespace PrizeTracker.Core
             // an asset bundle for decoration, so on a session that has not been near the Shop
             // there is simply no plaque, and the heading sits where it always did.
             _plaque = Img("Plaque", panel, null, new Color(1f, 1f, 1f, 0f));
-            NativeHistoryScreen.Place(_plaque, 1, 1, 1, 1, -76, -PlaqueTop, PlaqueW, PlaqueH);
+            NativeHistoryScreen.Place(_plaque, 1, 1, 1, 1, -HeadInset, -HeadTopY, PlaqueW, PlaqueH);
             // Kept above the season line by construction: the line is placed from the plaque's
             // own bottom edge, so a differently-shaped plaque next set pushes the text down
             // rather than landing on it.
 
             var title = GameArt.Label("Text_Bold", panel, "LEADERBOARD", 44, Ink,
                                       TextAlignmentOptions.TopLeft);
-            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -34, 560, 70);
+            // Inset from the backdrop's edge, not flush with it: the backdrop starts where the
+            // rows do, so anything placed at the row margin sits right on its rounded corner.
+            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, HeadInset, -HeadTopY, 560, 70);
 
             _subtitle = GameArt.Label("Text_Medium", panel, "", 28, Ink, TextAlignmentOptions.TopRight);
             _subtitle.enableWordWrapping = true;
             // Inset a little further than the plaque: right-aligned text reads as crowding the
             // edge at the same margin a solid image sits comfortably at.
-            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -100,
-                                      -(PlaqueTop + PlaqueH + 14f), PlaqueW, 80);
+            NativeHistoryScreen.Place(_subtitle.rectTransform, 1, 1, 1, 1, -(HeadInset + 24f),
+                                      -(HeadTopY + PlaqueH + 14f), PlaqueW, 80);
 
             // Built BEFORE the podium so it sits behind it: this canvas draws in sibling order.
             var stage = Img("Stage", panel, GameArt.Sprite("btn_Oct_20"), StageBg);
@@ -320,14 +331,25 @@ namespace PrizeTracker.Core
 
             _status = GameArt.Label("Text_Regular", share.transform, "", 26, InkDim,
                                     TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_status.rectTransform, 1, 0.5f, 1, 0.5f, -46, 0, 700, 40);
+            NativeHistoryScreen.Place(_status.rectTransform, 1, 0.5f, 1, 0.5f, -52, 0, 700, 40);
 
-            var box = Img("Box", share.transform, GameArt.Sprite("btn_Oct_16"),
-                          new Color(0.80f, 0.82f, 0.85f, 1f));
-            NativeHistoryScreen.Place(box, 1, 0.5f, 1, 0.5f, 0, 0, 32, 32);
-            var inner = Img("BoxFill", box, GameArt.Sprite("btn_Oct_16"), Color.white);
-            NativeHistoryScreen.Place(inner, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 26, 26);
-            _shareTick = Img("Tick", inner, GameArt.Sprite("btn_Oct_16"), Accent);
+            // The client's own checkbox art - checkboxBG is the square and Checkmark the tick,
+            // the same two sprites the Settings screen's WINDOWED box is built from - so this
+            // reads as a control the game itself put here. Both are plain icons, not nine-slice
+            // plates, so they are drawn Simple with their aspect kept.
+            // The Settings screen's own design: a rounded square that is light grey when off and
+            // fills SOLID RED with a WHITE tick when on. The first attempt had it backwards - a
+            // white box on a white panel, so no box at all, and a red tick - which is why it read
+            // as a stray pink mark rather than a control.
+            _shareBox = Img("Box", share.transform, GameArt.Sprite("checkboxBG"), BoxOff);
+            NativeHistoryScreen.Place(_shareBox, 1, 0.5f, 1, 0.5f, 0, 0, 40, 40);
+            var boxImg = _shareBox.GetComponent<Image>();
+            if (boxImg != null) { boxImg.type = Image.Type.Simple; boxImg.preserveAspect = true; }
+
+            _shareTick = Img("Tick", _shareBox, GameArt.Sprite("Checkmark"), Color.white);
+            NativeHistoryScreen.Place(_shareTick, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 26, 26);
+            var tickImg = _shareTick.GetComponent<Image>();
+            if (tickImg != null) { tickImg.type = Image.Type.Simple; tickImg.preserveAspect = true; }
             NativeHistoryScreen.Place(_shareTick, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 16, 16);
 
             // The whole strip is the hit target, not just the 32-unit box.
@@ -402,7 +424,6 @@ namespace PrizeTracker.Core
             _rows.Clear();
             foreach (var a in _podiumArt) if (a != null) UnityEngine.Object.Destroy(a);
             _podiumArt.Clear();
-            if (_pinned != null) { UnityEngine.Object.Destroy(_pinned.gameObject); _pinned = null; }
             _pending.Clear();
 
             var st = Board != null ? Board.State : null;
@@ -466,17 +487,12 @@ namespace PrizeTracker.Core
             if (_pageLabel != null) _pageLabel.text = _pager.Label(total);
             ShowPlaque();
 
-            // Your own row, pinned below the list when you are not in the visible part of it.
+            // Your own row, when you are not on this page: it takes the last slot of the
+            // right-hand column, drawn after the list so it sits over whatever was there. On a
+            // full page that costs one entry - the one you are least likely to be looking for,
+            // given that you are looking for yourself.
             if (!meShown && st.Me != null)
-            {
-                var host = new GameObject("Pinned", typeof(RectTransform));
-                host.transform.SetParent(_body.parent, false);
-                _pinned = (RectTransform)host.transform;
-                NativeHistoryScreen.Place(_pinned, 0.5f, 1, 0.5f, 1, 0, -PinnedTop, RowW, RowH);
-                // Centred under the two columns rather than in one of them: it is not part of the
-                // ranking's reading order, it is where you are.
-                Row(_pinned, st.Me, (RowW - HalfW) * 0.5f, 0f, true, RowA);
-            }
+                Row(_body, st.Me, HalfW + ListGap, (VisibleRows - 1) * (RowH + RowGap), true, RowA);
 
             UpdateStatus();
         }
@@ -815,18 +831,19 @@ namespace PrizeTracker.Core
             if (Board == null) { _status.text = ""; return; }
 
             bool on = Board.Enabled;
+            if (_shareBox != null)
+            {
+                var img = _shareBox.GetComponent<Image>();
+                if (img != null) img.color = on ? ClientRed : BoxOff;
+            }
             if (_shareTick != null)
             {
                 var img = _shareTick.GetComponent<Image>();
-                if (img != null) img.color = on ? Accent : new Color(0f, 0f, 0f, 0f);
+                if (img != null) img.color = on ? Color.white : new Color(0f, 0f, 0f, 0f);
             }
 
-            // Says what the switch does, not what the service is doing - the submit status was
-            // detail for a setting nobody was looking at.
-            var who = Board.EffectiveName;
-            _status.text = !on ? "Not sharing your score"
-                         : string.IsNullOrEmpty(who) ? "Sharing your score once you have played a match"
-                         : "Sharing your score as " + who;
+            // Just the name of the switch; the tick says whether it is on.
+            _status.text = "Share score";
         }
 
 
