@@ -22,6 +22,12 @@ namespace PrizeTracker.Core
         public long FirstSeen, LastSeen;
         public List<string> Flags = new List<string>();
 
+        /// <summary>
+        /// This player's avatar as ids, not as a picture - see OutfitCode. Empty for anyone whose
+        /// client predates this or who has not shared, and the podium falls back to their initial.
+        /// </summary>
+        public string Outfit = "";
+
         public string Record { get { return Wins + "-" + Losses; } }
     }
 
@@ -212,6 +218,10 @@ namespace PrizeTracker.Core
                 // client decides. The service just stores the answer and ranks on it.
                 ["master"] = Season != null && Season.IsMaster(exp),
                 ["localMatches"] = LocalMatchesThisSeason(),
+                // Our own avatar as a few hundred bytes of item ids, so other players' clients can
+                // build the real 3D figure for the podium. Never an image, and never anyone
+                // else's - only what this account is wearing.
+                ["outfit"] = OutfitCode.Mine(),
                 ["clientTs"] = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds,
             };
             if (Season != null && Season.EndUtc.HasValue)
@@ -335,6 +345,7 @@ namespace PrizeTracker.Core
                 Rank = p.Value<int?>("rank") ?? 0,
                 PlayerId = p.Value<string>("playerId") ?? "",
                 DisplayName = p.Value<string>("displayName") ?? "",
+                Outfit = p.Value<string>("outfit") ?? "",
                 Exp = p.Value<int?>("exp") ?? 0,
                 Wins = p.Value<int?>("wins") ?? 0,
                 Losses = p.Value<int?>("losses") ?? 0,

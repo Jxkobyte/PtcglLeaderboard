@@ -104,14 +104,19 @@ async function postSnapshot(request, env, now) {
             s.elo, s.localMatches, s.clientTs, t, JSON.stringify(flags)),
     env.DB.prepare(
       'INSERT INTO standing (season_id, player_id, display_name, exp, wins, losses, season_matches, ' +
-      'consecutive_wins, elo, master, snapshots, first_seen, last_seen, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+      'consecutive_wins, elo, master, snapshots, first_seen, last_seen, flags, outfit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
       'ON CONFLICT(season_id, player_id) DO UPDATE SET display_name = excluded.display_name, ' +
       'exp = excluded.exp, wins = excluded.wins, losses = excluded.losses, ' +
       'season_matches = excluded.season_matches, consecutive_wins = excluded.consecutive_wins, ' +
       'elo = excluded.elo, master = excluded.master, snapshots = excluded.snapshots, ' +
-      'last_seen = excluded.last_seen, flags = excluded.flags')
+      // An outfit only ever REPLACES a stored one when the client actually sent it, so a client
+      // that has not been updated - or a player who has not opted in - does not blank the figure
+      // that other players are already seeing on the podium.
+      'last_seen = excluded.last_seen, flags = excluded.flags, ' +
+      'outfit = COALESCE(excluded.outfit, standing.outfit)')
       .bind(s.seasonId, s.playerId, s.displayName, s.exp, s.wins, s.losses, s.seasonMatches,
-            s.consecutiveWins, s.elo, s.master, snapshots, firstSeen, t, JSON.stringify(unionFlags)),
+            s.consecutiveWins, s.elo, s.master, snapshots, firstSeen, t, JSON.stringify(unionFlags),
+            s.outfit),
   ];
   if (s.endDate) {
     writes.push(env.DB.prepare(
@@ -189,6 +194,28 @@ export function checkSnapshot(s, prev, t) {
   return flags;
 }
 
+const OUTFIT_MAX = 4096;
+
+/** An outfit we are willing to store and serve, or null. Never throws on bad input. */
+export function cleanOutfit(raw) {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > OUTFIT_MAX) return null;
+  let o;
+  try { o = JSON.parse(raw); } catch { return null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  if (!Number.isInteger(o.look)) return null;
+  if (!o.items || typeof o.items !== 'object' || Array.isArray(o.items)) return null;
+
+  const keys = Object.keys(o.items);
+  if (keys.length === 0 || keys.length > 32) return null;
+  for (const k of keys) {
+    if (!/^[0-9]{1,4}$/.test(k)) return null;
+    const v = o.items[k];
+    if (typeof v !== 'string' || v.length === 0 || v.length > 96) return null;
+  }
+  // Re-serialised from what we parsed, so whatever is stored is exactly what we validated.
+  return JSON.stringify({ look: o.look, items: o.items });
+}
+
 export function validateSnapshot(b) {
   if (!b || typeof b !== 'object') return { error: 'body must be an object' };
 
@@ -218,8 +245,15 @@ export function validateSnapshot(b) {
     endDate = b.endDate;
   }
 
+  // The avatar, as item ids. Rejected rather than trusted: it is stored and handed to every other
+  // client, so it has to be valid JSON of the shape we expect and small. An outfit is a few
+  // hundred bytes, so 4KB is generous and still bounds what one row can cost everyone reading the
+  // board. Absent is normal - an older client, or a player who has not shared - and leaves any
+  // stored outfit untouched rather than blanking it.
+  const outfit = cleanOutfit(b.outfit);
+
   return { value: { playerId, displayName, seasonId, exp, wins, losses, seasonMatches,
-                    consecutiveWins, elo, master, localMatches, clientTs, endDate } };
+                    consecutiveWins, elo, master, localMatches, clientTs, endDate, outfit } };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -337,6 +371,7 @@ function publicRow(r, rank, t) {
     rank,
     playerId: r.player_id,
     displayName: r.display_name,
+    outfit: r.outfit || '',
     exp: Number(r.exp),
     wins: Number(r.wins),
     losses: Number(r.losses),

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { openMemoryDb } from './d1shim.js';
-import { handle, checkSnapshot, validateSnapshot, cleanName } from './worker.js';
+import { handle, checkSnapshot, validateSnapshot, cleanName, cleanOutfit } from './worker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SCHEMA = readFileSync(join(here, 'schema.sql'), 'utf8');
@@ -268,4 +268,51 @@ test('checkSnapshot in isolation', () => {
   assert.deepEqual(checkSnapshot({ ...s, wins: 9, seasonMatches: 14 }, prev, 100), ['nonmonotonic']);
   assert.ok(checkSnapshot({ ...s, wins: 20, seasonMatches: 25 }, prev, 100).includes('impossible-rate'));
   assert.ok(validateSnapshot(null).error);
+});
+
+// An outfit is a few hundred bytes of item ids - never an image - that let every other client
+// build the real 3D figure for the podium. It is stored and served to everyone, so it is
+// validated rather than trusted.
+const outfit = JSON.stringify({ look: 0, items: { '1': 'avatar-body-03', '4': 'tops-hoodie-11' } });
+
+test('an outfit is accepted, served on the board, and never blanked by a later submission', async () => {
+  const e = env(), c = clock();
+
+  await post(e, c, { ...base, outfit });
+  let b = await get(e, c, '/v1/leaderboard');
+  assert.equal(b.body.players[0].outfit, outfit);
+
+  // The usual case for a client that has not been updated, or a player who has not shared: the
+  // figure other players are already seeing must survive it.
+  c.t += 600;
+  await post(e, c, { ...base, wins: 21, seasonMatches: 31, localMatches: 30 });
+  b = await get(e, c, '/v1/leaderboard');
+  assert.equal(b.body.players[0].outfit, outfit, 'a submission without an outfit must not blank it');
+
+  // A new one replaces it.
+  const changed = JSON.stringify({ look: 1, items: { '1': 'avatar-body-09' } });
+  c.t += 600;
+  await post(e, c, { ...base, wins: 22, seasonMatches: 32, localMatches: 31, outfit: changed });
+  b = await get(e, c, '/v1/leaderboard');
+  assert.equal(b.body.players[0].outfit, changed);
+});
+
+test('cleanOutfit refuses anything it would not want to hand to every client', () => {
+  assert.equal(cleanOutfit(outfit), outfit);
+
+  assert.equal(cleanOutfit(undefined), null);
+  assert.equal(cleanOutfit(''), null);
+  assert.equal(cleanOutfit('not json'), null);
+  assert.equal(cleanOutfit('[]'), null, 'must be an object');
+  assert.equal(cleanOutfit('{"items":{"1":"a"}}'), null, 'look is required');
+  assert.equal(cleanOutfit('{"look":0}'), null, 'items are required');
+  assert.equal(cleanOutfit('{"look":0,"items":{}}'), null, 'an empty outfit is not one');
+  assert.equal(cleanOutfit('{"look":0,"items":{"body":"a"}}'), null, 'keys are the enum numbers');
+  assert.equal(cleanOutfit('{"look":0,"items":{"1":42}}'), null, 'ids are strings');
+  assert.equal(cleanOutfit('{"look":0,"items":{"1":"' + 'x'.repeat(200) + '"}}'), null, 'id too long');
+  assert.equal(cleanOutfit('{"look":0,"items":{"1":"a"}}' + ' '.repeat(5000)), null, 'too big');
+
+  // Whatever is stored is exactly what was validated - extra keys do not ride along.
+  const extra = cleanOutfit('{"look":2,"items":{"1":"a"},"evil":"drop table"}');
+  assert.deepEqual(JSON.parse(extra), { look: 2, items: { '1': 'a' } });
 });

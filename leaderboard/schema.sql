@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS standing (
   first_seen       INTEGER NOT NULL,
   last_seen        INTEGER NOT NULL,
   flags            TEXT    NOT NULL DEFAULT '[]', -- union of every flag ever raised this season
+  -- The player's avatar as item ids, not as a picture: a few hundred bytes that let every other
+  -- client build the real 3D figure locally for the podium. NULL until a client sends one, and a
+  -- submission without one leaves whatever is already stored alone.
+  outfit           TEXT,
   PRIMARY KEY (season_id, player_id)
 );
 CREATE INDEX IF NOT EXISTS standing_season_exp ON standing (season_id, exp DESC, season_matches DESC);
