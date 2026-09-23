@@ -31,6 +31,12 @@ namespace PrizeTracker.Core
         // match-history recording
         public MatchHistory History;
         public Leaderboard Board;
+
+        /// <summary>
+        /// Off when the mod is off. A flag rather than the component's own enabled: the polling
+        /// loop is a coroutine, and a coroutine keeps running on a disabled component.
+        /// </summary>
+        public bool Active = true;
         private DateTime _matchStart;
         private bool _recorded;
 
@@ -53,6 +59,10 @@ namespace PrizeTracker.Core
 
         private void Tick()
         {
+            // Nothing is watched while off - and a match played while off is not a match we
+            // were in, so it must not be recorded as one on the way back in.
+            if (!Active) { _inMatch = false; return; }
+
             // One read of the match record per tick: board and seat then provably describe the
             // same moment, and we avoid re-allocating the retriever several times a tick.
             var info = Game.Info();

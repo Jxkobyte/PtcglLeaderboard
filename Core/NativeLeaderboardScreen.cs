@@ -25,7 +25,6 @@ namespace PrizeTracker.Core
         public MatchHistory History;
 
         /// <summary>Called when sharing is switched on or off, so the choice is written to disk.</summary>
-        public Action OnSharingChanged;
 
         private static readonly Color Ink = new Color(0.16f, 0.17f, 0.20f, 1f);
         private static readonly Color InkDim = new Color(0.55f, 0.57f, 0.61f, 1f);
@@ -36,11 +35,6 @@ namespace PrizeTracker.Core
         private static readonly Color RowA = new Color(0.965f, 0.968f, 0.975f, 1f);
         private static readonly Color RowB = new Color(0.985f, 0.987f, 0.990f, 1f);
         private static readonly Color Hairline = new Color(0f, 0f, 0f, 0.10f);
-
-        // The red the client uses for an active control - its ON toggles and selected buttons -
-        // and the light grey its checkboxes sit at when off.
-        private static readonly Color ClientRed = new Color(0.890f, 0.035f, 0.110f, 1f);
-        private static readonly Color BoxOff = new Color(0.905f, 0.905f, 0.905f, 1f);
 
         // A backdrop for the podium, and a floor for the blocks to stand on, so the three figures
         // read as being somewhere rather than cut out and pasted onto the panel.
@@ -169,8 +163,7 @@ namespace PrizeTracker.Core
         private bool _plaqueLogged;
         private Transform _body, _podium;
         private readonly List<GameObject> _podiumArt = new List<GameObject>();
-        private TextMeshProUGUI _subtitle, _foot, _status, _empty;
-        private RectTransform _shareTick, _shareBox;
+        private TextMeshProUGUI _subtitle, _foot, _empty;
         private readonly List<GameObject> _rows = new List<GameObject>();
         private BoardState _rendered;
         private float _nextTick;
@@ -320,52 +313,6 @@ namespace PrizeTracker.Core
             // them.
             _foot = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.MidlineLeft);
             NativeHistoryScreen.Place(_foot.rectTransform, 0, 0, 0, 0, 80, 60, 780, 40);
-
-            // Sharing lives here rather than in the client's Settings screen: it is the one
-            // switch that decides whether anything leaves this machine, and the place to answer
-            // that is the board it would go to.
-            var share = new GameObject("Share", typeof(RectTransform));
-            share.transform.SetParent(panel, false);
-            var shareRect = (RectTransform)share.transform;
-            NativeHistoryScreen.Place(shareRect, 1, 0, 1, 0, -80, 60, 760, 44);
-
-            _status = GameArt.Label("Text_Regular", share.transform, "", 26, InkDim,
-                                    TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(_status.rectTransform, 1, 0.5f, 1, 0.5f, -52, 0, 700, 40);
-
-            // The client's own checkbox art - checkboxBG is the square and Checkmark the tick,
-            // the same two sprites the Settings screen's WINDOWED box is built from - so this
-            // reads as a control the game itself put here. Both are plain icons, not nine-slice
-            // plates, so they are drawn Simple with their aspect kept.
-            // The Settings screen's own design: a rounded square that is light grey when off and
-            // fills SOLID RED with a WHITE tick when on. The first attempt had it backwards - a
-            // white box on a white panel, so no box at all, and a red tick - which is why it read
-            // as a stray pink mark rather than a control.
-            _shareBox = Img("Box", share.transform, GameArt.Sprite("checkboxBG"), BoxOff);
-            NativeHistoryScreen.Place(_shareBox, 1, 0.5f, 1, 0.5f, 0, 0, 40, 40);
-            var boxImg = _shareBox.GetComponent<Image>();
-            if (boxImg != null) { boxImg.type = Image.Type.Simple; boxImg.preserveAspect = true; }
-
-            _shareTick = Img("Tick", _shareBox, GameArt.Sprite("Checkmark"), Color.white);
-            NativeHistoryScreen.Place(_shareTick, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 26, 26);
-            var tickImg = _shareTick.GetComponent<Image>();
-            if (tickImg != null) { tickImg.type = Image.Type.Simple; tickImg.preserveAspect = true; }
-            NativeHistoryScreen.Place(_shareTick, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 16, 16);
-
-            // The whole strip is the hit target, not just the 32-unit box.
-            var hit = share.AddComponent<Image>();
-            hit.color = new Color(0f, 0f, 0f, 0f);
-            hit.raycastTarget = true;
-            var shareBtn = share.AddComponent<Button>();
-            shareBtn.targetGraphic = hit;
-            shareBtn.onClick.AddListener(() =>
-            {
-                if (Board == null) return;
-                Board.Enabled = !Board.Enabled;
-                if (OnSharingChanged != null) OnSharingChanged();
-                UpdateStatus();
-            });
-
 
             _pageLabel = GameArt.Label("Text_Regular", panel, "", 26, InkDim, TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(_pageLabel.rectTransform, 0.5f, 1, 0.5f, 1, 0, -PagingTop, 360, 40);
@@ -827,23 +774,6 @@ namespace PrizeTracker.Core
                              (age.Length > 0 ? "   ·   updated " + age : "");
             }
             else _foot.text = "Master league, ranked by ELO";
-
-            if (Board == null) { _status.text = ""; return; }
-
-            bool on = Board.Enabled;
-            if (_shareBox != null)
-            {
-                var img = _shareBox.GetComponent<Image>();
-                if (img != null) img.color = on ? ClientRed : BoxOff;
-            }
-            if (_shareTick != null)
-            {
-                var img = _shareTick.GetComponent<Image>();
-                if (img != null) img.color = on ? Color.white : new Color(0f, 0f, 0f, 0f);
-            }
-
-            // Just the name of the switch; the tick says whether it is on.
-            _status.text = "Share score";
         }
 
 

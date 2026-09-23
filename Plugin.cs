@@ -36,12 +36,18 @@ namespace PrizeTracker
         private Leaderboard _board;
         private Season _season;
 
-        // persisted settings
-        private ConfigEntry<float> _cfgX, _cfgY, _cfgW, _cfgH;
-        private ConfigEntry<bool> _cfgDeckBadge;
+        // Everything the one setting switches off. Only the Settings card itself stays on,
+        // so the mod can be switched back on from where it was switched off.
+        private NavTab _historyTab, _lbTab;
+        private NativeScreenInstaller _historyNative, _lbNative;
+        private DeckBadgeRefresher _badges;
+        private SettingsSection _settings;
 
-        // community leaderboard
-        private ConfigEntry<bool> _cfgLbEnabled;
+        // The one persisted setting: whether the mod is on at all. Sharing the season record
+        // with the leaderboard is part of what the mod does, not a separate switch.
+        private ConfigEntry<bool> _cfgEnabled;
+
+        // community leaderboard identity - managed automatically, no switches
         private ConfigEntry<string> _cfgLbName, _cfgLbLearnedName, _cfgLbApi, _cfgLbPlayerId;
 
         private void Awake()
@@ -66,14 +72,14 @@ namespace PrizeTracker
             // "MATCH HISTORY" tab in the game's own nav bar, plus the screen it opens.
             var screen = _host.AddComponent<HistoryScreen>();
             screen.History = _history;
-            var nav = _host.AddComponent<NavTab>();
+            var nav = _historyTab = _host.AddComponent<NavTab>();
             nav.History = _history;
             nav.Screen = screen;
 
             // Promote the tab to a real screen in the client's own navigation. If this cannot find
             // what it expects it installs nothing and says so, and the overlay screen above keeps
             // working - so the feature degrades rather than disappearing.
-            var native = _host.AddComponent<NativeScreenInstaller>();
+            var native = _historyNative = _host.AddComponent<NativeScreenInstaller>();
             native.Tab = nav;
             native.ScreenName = "PrizeTrackerMatchHistoryScreen";
             native.Label = "history";
@@ -87,10 +93,9 @@ namespace PrizeTracker
             native.SelfTest = Config.Bind("Debug", "SelfTestOpenHistoryOnStart", false,
                 "Open the Match History screen once at startup and log the result. For verifying "
                 + "the screen without needing to drive the mouse.").Value;
-            DeckBadge.Enabled = _cfgDeckBadge.Value;
             // The Harmony patch only fires when a tile binds to a deck, so tiles already on screen
             // keep the previous build's badges after a reload. This sweeps them.
-            _host.AddComponent<DeckBadgeRefresher>();
+            _badges = _host.AddComponent<DeckBadgeRefresher>();
 
             // Patches DeckSelectEntry.Setup so each deck tile in the deck screen shows its record.
             try
@@ -118,7 +123,6 @@ namespace PrizeTracker
                 Log.LogInfo("leaderboard: generated player id");
             }
             _board = _host.AddComponent<Leaderboard>();
-            _board.Enabled = _cfgLbEnabled.Value;
             _board.DisplayName = _cfgLbName.Value;
             _board.ApiBase = _cfgLbApi.Value;
             _board.PlayerId = _cfgLbPlayerId.Value;
@@ -127,13 +131,13 @@ namespace PrizeTracker
             _board.OnLearnedName = n => { _cfgLbLearnedName.Value = n; };
             if (!string.IsNullOrEmpty(_cfgLbLearnedName.Value)) _board.SetLearnedName(_cfgLbLearnedName.Value);
 
-            var lbTab = _host.AddComponent<NavTab>();
+            var lbTab = _lbTab = _host.AddComponent<NavTab>();
             lbTab.TabName = "PrizeTrackerLeaderboardTab";
             lbTab.Caption = "LEADERBOARD";
             lbTab.InsertAfter = "CARD DEX";     // the end of the text tabs
             lbTab.History = _history;
 
-            var lbNative = _host.AddComponent<NativeScreenInstaller>();
+            var lbNative = _lbNative = _host.AddComponent<NativeScreenInstaller>();
             lbNative.Tab = lbTab;
             lbNative.ScreenName = "PrizeTrackerLeaderboardScreen";
             lbNative.Label = "leaderboard";
@@ -144,7 +148,6 @@ namespace PrizeTracker
                 s.Board = board;
                 s.Season = season;
                 s.History = history;   // the podium's avatars come from matches we watched
-                s.OnSharingChanged = SaveSettings;
                 return s;
             };
 
@@ -163,22 +166,24 @@ namespace PrizeTracker
             _detector.Board = _board;
             _detector.Initialize(Log, _tracker);
 
+            // The PRIZE TRACKER card in the client's Settings screen: the one switch.
+            _settings = _host.AddComponent<SettingsSection>();
+            _settings.IsEnabled = () => _cfgEnabled.Value;
+            _settings.SetEnabled = ApplyEnabled;
+
+            ApplyEnabled(_cfgEnabled.Value);
+
             Log.LogWarning(NAME + " v" + VERSION + " loaded. F3 reload deck, F4 clipboard deck, F6 hot reload, F8 dump UI.");
         }
 
         private void BindConfig()
         {
-            _cfgX = Config.Bind("Overlay", "X", 40f, "Overlay position X.");
-            _cfgY = Config.Bind("Overlay", "Y", 120f, "Overlay position Y.");
-            _cfgW = Config.Bind("Overlay", "Width", 340f, "Overlay width.");
-            _cfgH = Config.Bind("Overlay", "Height", 420f, "Overlay height.");
 
-            _cfgDeckBadge = Config.Bind("Overlay", "ShowDeckWinrates", true,
-                "Draw each deck's win/loss record onto the game's own deck tiles in the deck screen.");
-
-            _cfgLbEnabled = Config.Bind("Leaderboard", "Enabled", false,
-                "Share your season record (exp, wins, losses) with the community leaderboard after each " +
-                "match. Off by default. Viewing the board never requires this.");
+            _cfgEnabled = Config.Bind("General", "Enabled", true,
+                "Whether the mod is on. Off switches off everything - the MATCH HISTORY and " +
+                "LEADERBOARD tabs, deck win-rate badges, match recording and sharing your season " +
+                "record with the leaderboard - except the PRIZE TRACKER card in Settings, where " +
+                "it can be switched back on. Also changeable from that card.");
             _cfgLbName = Config.Bind("Leaderboard", "DisplayName", "",
                 "Name shown on the leaderboard. Leave empty to use your in-game name.");
             _cfgLbLearnedName = Config.Bind("Leaderboard", "InGameName", "",
@@ -190,10 +195,28 @@ namespace PrizeTracker
 
         }
 
-        private void SaveSettings()
+        /// <summary>
+        /// Switch everything on or off. Only the Settings card is left running when off - it is
+        /// how the mod gets switched back on - and the config entry saves itself on assignment.
+        /// </summary>
+        private void ApplyEnabled(bool on)
         {
-            _cfgDeckBadge.Value = DeckBadge.Enabled;
-            if (_board != null) _cfgLbEnabled.Value = _board.Enabled;
+            _cfgEnabled.Value = on;
+
+            if (_historyTab != null) _historyTab.SetHidden(!on);
+            if (_lbTab != null) _lbTab.SetHidden(!on);
+            if (_historyNative != null) _historyNative.enabled = on;
+            if (_lbNative != null) _lbNative.enabled = on;
+            if (_detector != null) _detector.Active = on;
+            if (_board != null) _board.Enabled = on;
+            if (_badges != null) _badges.enabled = on;
+
+            DeckBadge.Enabled = on;
+            // Badges already painted onto deck tiles are not un-painted by the flag alone.
+            if (on) DeckBadge.RefreshExisting();
+            else { try { DestroyAllNamed("PrizeTrackerWinrate"); } catch { } }
+
+            Log.LogInfo(on ? "enabled" : "disabled - only the Settings card stays on");
         }
 
         private void Update()
@@ -201,11 +224,7 @@ namespace PrizeTracker
 
             Tuning.Poll();
 
-            // The prize display lives inside the client's own prize drawer, so there is nothing
-            // to show, hide or toggle - it appears exactly when you open your prizes.
-            bool inMatch = Game.InMatch();
-
-            if (_detector == null) return;
+            if (_detector == null || !_cfgEnabled.Value) return;
 
             if (Input.GetKeyDown(KeyCode.F3))
                 _detector.TryLoadDeck(true);
@@ -232,8 +251,6 @@ namespace PrizeTracker
         /// </summary>
         private void OnDestroy()
         {
-            SaveSettings();
-
             try { _harmony.UnpatchSelf(); }
             catch (Exception e) { Log.LogWarning("unpatch failed: " + e.Message); }
 

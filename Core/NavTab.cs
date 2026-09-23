@@ -260,6 +260,19 @@ namespace PrizeTracker.Core
         public Transform TabRoot { get { return _tab; } }
 
         /// <summary>
+        /// Take the tab out of the top bar (the mod switched off) or put it back.
+        ///
+        /// Hidden means this component stops running as well: the bar is rebuilt on every
+        /// navigation and Ensure() would re-clone the tab into it. When it is switched back on
+        /// Ensure() re-clones as usual, and NativeScreenInstaller re-wires the new clone.
+        /// </summary>
+        public void SetHidden(bool hidden)
+        {
+            enabled = !hidden;
+            if (_tab != null && _tab.gameObject.activeSelf == hidden) _tab.gameObject.SetActive(!hidden);
+        }
+
+        /// <summary>
         /// Hand the tab over to the client's own navigation.
         ///
         /// Two stand-ins go away once a real screen exists behind this tab. The ClickCatcher was an
