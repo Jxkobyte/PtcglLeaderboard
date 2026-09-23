@@ -96,7 +96,7 @@ on your computer, in `%LOCALAPPDATA%\PtcglLeaderboard`.
 
 ## Will I get banned for using this?
 
-Honest answer: nobody can promise either way, but here's where it stands.
+**Most likely no.** Nobody can promise it, but here's why the risk is low.
 
 - **I've been modding the game for over a year without a ban**, and I'm not aware of anyone being
   banned for using mods like this. Pokémon TCG Live has no anti-cheat that looks for them.
