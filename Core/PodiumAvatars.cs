@@ -38,11 +38,28 @@ namespace PrizeTracker.Core
         private const float Headspace = 0.50f;
 
         /// <summary>
+        /// How tall an avatar is, in world units. Measured off all three groups, which agreed to
+        /// within a hundredth - they are the same rig wearing different clothes.
+        /// </summary>
+        private const float FigureHeight = 1.80f;
+
+        /// <summary>
+        /// How wide a block is, in world units. Public because the podium has to space its columns
+        /// exactly this far apart for the three to meet without overlapping, and a number the two
+        /// sides each keep their own copy of is a number that drifts apart.
+        ///
+        /// Not wider: the FRONT face is nearer the camera than the block's centre and so is
+        /// magnified by perspective, while the frame it must fit inside is narrower at that depth.
+        /// At 2.2 the top-front corner was being clipped at the edge of the render texture.
+        /// </summary>
+        public const float BlockWidth = 1.9f;
+
+        /// <summary>
         /// About how tall the framed figure is, head to foot plus that headroom, in world units.
         /// The podium screen needs the same number to work out where the block ends up inside the
         /// picture, and one shared constant is better than the same 2-ish typed in two places.
         /// </summary>
-        public const float FramedHeight = 1.80f + Headspace;
+        public const float FramedHeight = FigureHeight + Headspace;
 
         /// <summary>What a place borrowed, so it can be handed back exactly as it was.</summary>
         private class Borrowed
@@ -259,21 +276,23 @@ namespace PrizeTracker.Core
                 var held = Take(place, cam);
                 held.Ctrl = ctrl;
 
-                // EVERY renderer, combined - not the first one found. A figure is a body plus
-                // hair, clothes, shoes and glasses, and GetComponentInChildren returns whichever
-                // of those the hierarchy happens to put first. Framing from one part measured a
-                // different figure on each podium, so the three blocks came out at three
-                // different sizes even though all three are the same cube.
+                // The group's own transform, and a FIXED figure height - not measured bounds.
+                //
+                // Measuring the figure looked more correct and is why the three blocks kept
+                // coming out subtly different. Bounds are whatever is assembled at the instant
+                // they are read, and the three figures finish dressing at different moments, so
+                // each podium was framed against a slightly different silhouette: blocks a few
+                // units apart in height, with a visible step at every join.
+                //
+                // Every group stands on its own transform (probed: y = 0.05, 0.00 and 0.63), and
+                // the avatars are all the same 1.8 units tall, so this frames all three
+                // identically and the blocks come out pixel for pixel the same.
                 var rends = ctrl.GetComponentsInChildren<Renderer>(true);
-                if (rends.Length == 0) return false;
-                var b = rends[0].bounds;
-                for (int i = 1; i < rends.Length; i++)
-                    if (rends[i] != null) b.Encapsulate(rends[i].bounds);
-                var rend = rends[0];
-                float feet = b.center.y - b.extents.y;
-                float head = b.center.y + b.extents.y;
-
-                held.Block = MakeBlock(rend.gameObject.layer, b.center, feet, blockH, blockColour);
+                int layer = rends.Length > 0 ? rends[0].gameObject.layer : ctrl.gameObject.layer;
+                var ground = ctrl.transform.position;
+                float feet = ground.y;
+                float head = feet + FigureHeight;
+                held.Block = MakeBlock(layer, ground, feet, blockH, blockColour);
 
                 // Frame the block AND the figure. Visible height at a perspective camera is
                 // 2 * distance * tan(fov / 2), so the distance follows from how much has to fit -
@@ -293,8 +312,8 @@ namespace PrizeTracker.Core
                 // the other way (probed: y rotation 180) and moving it to the near side would put
                 // the figure behind it.
                 float side = Mathf.Abs(Mathf.DeltaAngle(cam.transform.eulerAngles.y, 0f)) < 90f ? -1f : 1f;
-                cam.transform.position = new Vector3(b.center.x, (top + bottom) * 0.5f,
-                                                     b.center.z + side * dist);
+                cam.transform.position = new Vector3(ground.x, (top + bottom) * 0.5f,
+                                                     ground.z + side * dist);
 
                 cam.gameObject.SetActive(true);
                 cam.enabled = true;
@@ -352,7 +371,7 @@ namespace PrizeTracker.Core
             // frame it has to fit inside is correspondingly narrower at that depth. At 2.2 that
             // left roughly 13 units of margin and the top-front corner was being cut off at the
             // edge of the render texture.
-            cube.transform.localScale = new Vector3(1.9f, h, 0.7f);
+            cube.transform.localScale = new Vector3(BlockWidth, h, 0.7f);
 
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)

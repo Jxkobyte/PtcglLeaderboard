@@ -101,7 +101,10 @@ namespace PrizeTracker.Core
         // makes the figures bigger: they are framed by height, so the band is the only thing that
         // really sets their size. Six rows now rather than seven - still derived, so the count
         // follows the arithmetic rather than being typed in.
-        private const float PodiumTop = 20f, PodiumH = 584f;
+        // 664 rather than 584: five rows a column instead of six. The list was leaving a band
+        // of empty panel above the paging strip, and the figures are framed by height, so the
+        // band is the only thing that really sets how big they are. Ten players a page now.
+        private const float PodiumTop = 20f, PodiumH = 664f;
 
         // The tallest place's picture, and the shape they are all drawn at. Everything else on
         // the podium is measured from these two.
@@ -140,11 +143,12 @@ namespace PrizeTracker.Core
         private const float RowsSpace = PinnedTop - 8f - BodyTop;
         private const int VisibleRows = (int)((RowsSpace + RowGap) / (RowH + RowGap));
 
-        // The plaque is 1024x288 in the client's own art, and the heading drops below whatever
-        // height that comes to - so a differently-shaped plaque next set moves the heading rather
-        // than landing on top of it.
+        // The plaque is 1024x288 in the client's own art, and hangs under the season line on
+        // the right. Its height is derived from that shape, so a differently-proportioned plaque
+        // next set still sits where it should rather than being squashed to fit.
         private const float PlaqueW = 420f;
-        private const float TitleTop = 28f + PlaqueW * 288f / 1024f + 18f;
+        private const float PlaqueH = PlaqueW * 288f / 1024f;
+        private const float PlaqueTop = 92f;
 
         private bool _built;
         private RectTransform _plaque;
@@ -234,13 +238,11 @@ namespace PrizeTracker.Core
             // an asset bundle for decoration, so on a session that has not been near the Shop
             // there is simply no plaque, and the heading sits where it always did.
             _plaque = Img("Plaque", panel, null, new Color(1f, 1f, 1f, 0f));
-            NativeHistoryScreen.Place(_plaque, 0, 1, 0, 1, 76, -28, PlaqueW, PlaqueW * 288f / 1024f);
+            NativeHistoryScreen.Place(_plaque, 1, 1, 1, 1, -76, -PlaqueTop, PlaqueW, PlaqueH);
 
-            var title = GameArt.Label("Text_Bold", panel, "COMMUNITY\nLEADERBOARD", 42, Ink,
+            var title = GameArt.Label("Text_Bold", panel, "LEADERBOARD", 44, Ink,
                                       TextAlignmentOptions.TopLeft);
-            title.enableWordWrapping = true;
-            title.lineSpacing = -14f;
-            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -TitleTop, 420, 130);
+            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -34, 560, 70);
 
             _subtitle = GameArt.Label("Text_Regular", panel, "", 28, InkDim, TextAlignmentOptions.TopRight);
             _subtitle.enableWordWrapping = true;
@@ -457,16 +459,14 @@ namespace PrizeTracker.Core
 
             // Second, first, third - left to right. First place stands in the middle and highest,
             // which is the whole reason a podium reads as a ranking without being labelled.
-            // ColStep is how far apart the three stand; ColW is only how wide their labels are
-            // allowed to be. They used to be one number, which meant bringing the blocks together
-            // also squeezed the names. ColW is kept inside the block's own width, because the
-            // name is lettered ON the block now and must not hang off either end of it.
-            // ColStep is exactly a block wide, so the three meet edge to edge. At 330 against
-            // a 313-wide block there was a thin strip of panel showing between them, which read
-            // as three separate plinths rather than one podium. The blocks are a shade wider than
-            // the step so they overlap rather than leaving a seam at the join.
-            const float ColStep = 372f, ColW = 345f;
-            float[] xs = { 0f, -ColStep, ColStep };
+            // How far apart the three stand is DERIVED from how wide a block actually comes out
+            // on screen - its world width times the scale this band is drawn at - with two units
+            // of overlap so the join has no seam of panel showing through.
+            //
+            // Fixing that step at a number is what went wrong last time: growing the podium band
+            // widens the blocks, because everything here is scaled to fit the band, and the step
+            // stayed put. The three ended up overlapping by 56 units, far enough for first place
+            // to cover the end of second place's name.
 
             // Block heights in WORLD units, not pixels: the block is a real cube in front of the
             // real camera, and the camera frames block plus figure. A taller block therefore
@@ -482,7 +482,7 @@ namespace PrizeTracker.Core
             const float BlockH = 0.65f;
             float[] blocks = { BlockH, BlockH, BlockH };
 
-            float x = xs[place], blockH = blocks[place];
+            float blockH = blocks[place];
             Color medal = Medal[place], dim = MedalDim[place];
 
             // Each place's picture is sized in PROPORTION to what its camera frames, so every
@@ -491,12 +491,16 @@ namespace PrizeTracker.Core
             // is the shortest, so the same picture height was spread over less world - which
             // quietly argued against the ranking the podium exists to show.
             float pxPerUnit = ImgHMax / (PodiumAvatars.FramedHeight + blocks[0]);
+            float colStep = pxPerUnit * PodiumAvatars.BlockWidth - 2f;
+            float colW = colStep - 30f;                  // the name is lettered ON the block
+            float[] xs = { 0f, -colStep, colStep };
             float imgH = pxPerUnit * (PodiumAvatars.FramedHeight + blockH);
             float imgW = imgH * ImgAspect;
 
+            float x = xs[place];
             var col = new GameObject("Place" + (place + 1), typeof(RectTransform));
             col.transform.SetParent(_podium, false);
-            NativeHistoryScreen.Place((RectTransform)col.transform, 0.5f, 0, 0.5f, 0, x, 0, ColStep, PodiumH);
+            NativeHistoryScreen.Place((RectTransform)col.transform, 0.5f, 0, 0.5f, 0, x, 0, colStep, PodiumH);
             _podiumArt.Add(col);
             Transform t = col.transform;
 
@@ -567,7 +571,7 @@ namespace PrizeTracker.Core
                 var block = Img("Block", t, GameArt.Sprite("btn_Oct_16"), medal);
                 // Matches the real blocks' proportions, so a place with no outfit still lines up
                 // with the two beside it.
-                NativeHistoryScreen.Place(block, 0.5f, 0, 0.5f, 0, 0, 0, ColW + 16f, NumeralUp + 24f);
+                NativeHistoryScreen.Place(block, 0.5f, 0, 0.5f, 0, 0, 0, colW + 16f, NumeralUp + 24f);
                 var num = GameArt.Label("Text_Bold", block, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
                                         34, Color.white, TextAlignmentOptions.Center);
                 NativeHistoryScreen.Place(num.rectTransform, 0.5f, 0, 0.5f, 0, 0,
@@ -579,7 +583,7 @@ namespace PrizeTracker.Core
             var elo = GameArt.Label("Text_Medium", t, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
                                     24, new Color(1f, 1f, 1f, 0.85f), TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0,
-                                      EloUp - LineBox * 0.5f, ColW, LineBox);
+                                      EloUp - LineBox * 0.5f, colW, LineBox);
 
             var name = GameArt.Label("Text_Medium", t, "", 30, Color.white,
                                      TextAlignmentOptions.Center);
@@ -587,7 +591,7 @@ namespace PrizeTracker.Core
             name.text = Esc(p.DisplayName) +
                         (me ? "  <size=18>(YOU)</size>" : "");
             NativeHistoryScreen.Place(name.rectTransform, 0.5f, 0, 0.5f, 0, 0,
-                                      NameUp - LineBox * 0.5f, ColW, LineBox);
+                                      NameUp - LineBox * 0.5f, colW, LineBox);
         }
 
         private void Row(Transform parent, BoardRow p, float x, float y, bool me, Color bg)
