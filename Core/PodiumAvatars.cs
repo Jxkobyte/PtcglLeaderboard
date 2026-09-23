@@ -139,38 +139,94 @@ namespace PrizeTracker.Core
             var mgr = Mgr;
             if (mgr == null) yield break;
 
-            string anim = null;
-            try { anim = mgr.GetRandomVictoryAnimation(); }
-            catch { }
-            if (string.IsNullOrEmpty(anim)) yield break;
+            // A podium is a victory, so they play the animations the client plays when a player
+            // wins a match - and then ease back into their idle instead of snapping out of the
+            // pose.
+            //
+            // The snap is the client's, and it cannot be turned off from outside. PlayPoseAnimation
+            // takes a forceIdle flag but its body ignores it, always finishing with
+            // ResetAnimationFromTrigger, and every route back to idle in there goes through
+            // Animator.Play("idle") - which is a hard cut, never a blend. So the pose is driven
+            // here instead: the client's own trigger to start it, and CrossFade to finish, which
+            // is the same thing with a blend.
+            //
+            // Holding the final pose was the other way to avoid the cut, and it looked like a
+            // photograph rather than a person.
+            while (target != null)
+            {
+                string anim = null;
+                try { anim = mgr.GetRandomVictoryAnimation(); }
+                catch { }
+                if (string.IsNullOrEmpty(anim)) yield break;
 
-            // A podium is a victory, so they play the animation the client plays when a player
-            // wins a match - and then STAY in the pose it ends on.
-            //
-            // Holding it is the client's own trick and not something PlayPoseAnimation can do:
-            // that one takes a forceIdle flag, but its body ignores the flag completely and
-            // always finishes by calling ResetAnimationFromTrigger, which switches straight back
-            // to idle. Passing false would have changed nothing.
-            //
-            // FreezePoseAnimation instead stops the camera RENDERING near the end of the
-            // animation, so the render texture keeps the last frame it drew while the animator
-            // quietly returns to idle behind it. Give() resumes the camera, so the client gets it
-            // back unfrozen.
-            //
-            // Its onComplete is invoked WITHOUT a null check, so it gets an empty action rather
-            // than null - passing null throws inside the client's own coroutine.
-            bool held = false;
+                var anims = Animators(ctrl);
+                if (anims.Length == 0) yield break;
+                foreach (var a in anims) if (a != null) a.SetTrigger(anim);
+
+                // Wait for the pose to actually start before asking how long it is - the trigger
+                // takes a frame or two to leave idle, and asking too early measures the idle.
+                // Bounded, so a pose the controller has no state for cannot hang the loop.
+                float waited = 0f;
+                while (target != null && waited < 2f && IsIdle(anims[0]))
+                {
+                    waited += Time.deltaTime;
+                    yield return null;
+                }
+                if (target == null) yield break;
+
+                float length = Length(anims[0]);
+                if (length > Blend) yield return new WaitForSeconds(length - Blend);
+                if (target == null) yield break;
+
+                foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
+                yield return new WaitForSeconds(RestSeconds + place * 0.8f);
+            }
+        }
+
+        private const float Blend = 0.35f;
+        private const float RestSeconds = 3f;
+        private static readonly int IdleHash = Animator.StringToHash("idle");
+
+        private static bool IsIdle(Animator a)
+        {
+            return a != null && a.GetCurrentAnimatorStateInfo(0).shortNameHash == IdleHash;
+        }
+
+        private static float Length(Animator a)
+        {
+            return a == null ? 0f : a.GetCurrentAnimatorStateInfo(0).length;
+        }
+
+        /// <summary>
+        /// The animators that drive one figure - body, face, hair and the rest, which all have to
+        /// be blended together or the head finishes the pose after the body.
+        ///
+        /// The client keeps them in a private dictionary keyed by customisation type. That is the
+        /// exact set, so it is preferred; the child scan behind it is a fallback for a client
+        /// update that renames the field, and picks up the same animators plus possibly a few
+        /// unrelated ones, which is survivable where guessing would not be.
+        /// </summary>
+        private static Animator[] Animators(AvatarBaseController ctrl)
+        {
+            if (ctrl == null) return new Animator[0];
             try
             {
-                ctrl.FreezePoseAnimation(anim, place == 0, () => { }, false);
-                held = true;
+                var f = typeof(AvatarBaseController).GetField("_currentAvatarAnimatorDictionary",
+                            BindingFlags.Instance | BindingFlags.NonPublic);
+                var d = f == null ? null : f.GetValue(ctrl) as System.Collections.IDictionary;
+                if (d != null && d.Count > 0)
+                {
+                    var list = new List<Animator>();
+                    foreach (System.Collections.DictionaryEntry e in d)
+                    {
+                        var a = e.Value as Animator;
+                        if (a != null) list.Add(a);
+                    }
+                    if (list.Count > 0) return list.ToArray();
+                }
             }
-            catch (Exception e)
-            {
-                Plugin.Log.LogWarning("podium " + place + ": could not hold the pose (" +
-                                      e.Message + "); playing it through instead.");
-            }
-            if (!held) yield return ctrl.PlayPoseAnimation(anim, false, place == 0, true, null, false);
+            catch { }
+            return ctrl.GetComponentsInChildren<Animator>(true);
         }
 
         /// <summary>
@@ -313,9 +369,8 @@ namespace PrizeTracker.Core
             if (held == null) return;
             try
             {
-                // Unfreeze before anything else: the pose is held by leaving that camera
-                // paused, and handing it back paused would leave the client with an avatar that
-                // never redraws.
+                // Resumed defensively: nothing here pauses it any more, but an earlier visit
+                // that held a pose did, and a camera handed back paused never redraws.
                 if (held.Ctrl != null) held.Ctrl.ResumeAvatarCamera(false);
                 if (held.Cam != null)
                 {
