@@ -1,0 +1,61 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PtcglLeaderboardLauncher - keeps the BepInEx injector alive across PTCGL updates.
+
+    net472 on purpose: .NET Framework 4.7.2+ ships with every supported Windows, so this is a
+    single small .exe with no runtime to install and no DLLs beside it. That matters twice over -
+    once for install friction, and once because an unsigned tool that writes winhttp.dll into a
+    game folder already looks enough like a DLL hijack to antivirus without also dragging a
+    folder of dependencies along.
+
+    No package references for the same reason. The manifest is tab-separated text rather than
+    JSON specifically to avoid taking a dependency on Newtonsoft just to read six lines.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PtcglLeaderboardLauncher</AssemblyName>
+    <RootNamespace>PtcglLeaderboard.Launcher</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!--
+    Version and publisher metadata is not cosmetic here. This is an unsigned executable that
+    copies winhttp.dll into a game folder, so it already looks like a DLL hijack to a heuristic
+    scanner; a blank Details tab with no product, company or description is exactly what actual
+    malware ships. Filling it in is the cheapest available trust signal short of a certificate.
+
+    The icon is generated, original artwork - see src/branding/make_icon.py in the installer
+    repo, which is the source of truth. The game's own icon is deliberately NOT used.
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Company>Inevitable2002</Company>
+    <Product>PTCGL Leaderboard &amp; Match History</Product>
+    <AssemblyTitle>PTCGL Leaderboard &amp; Match History Launcher</AssemblyTitle>
+    <Description>Starts Pokémon TCG Live and keeps the Leaderboard &amp; Match History plugin installed across game updates.</Description>
+    <Copyright>Copyright © 2026 Inevitable2002</Copyright>
+    <ApplicationIcon>ptcglleaderboard.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Repair.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+</Project>
