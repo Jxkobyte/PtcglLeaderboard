@@ -29,8 +29,8 @@ in `%LOCALAPPDATA%\PtcglLeaderboard`.
 
 Honest answer: nobody can promise either way, but here's where it stands.
 
-- **We're not aware of anyone being banned for it**, and Pokémon TCG Live has no anti-cheat that
-  looks for mods.
+- **I've been modding the game for over a year without a ban**, and I'm not aware of anyone being
+  banned for using mods like this. Pokémon TCG Live has no anti-cheat that looks for them.
 - **It's built to give no advantage.** During a match it only notes that one started and how it
   ended: it doesn't show you anything, doesn't automate anything, and doesn't change cards, decks or
   games. It sends nothing to The Pokémon Company. The only thing it sends anywhere is your own season
