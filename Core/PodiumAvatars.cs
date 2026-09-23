@@ -52,6 +52,19 @@ namespace PrizeTracker.Core
         /// </summary>
         private static bool _loading;
 
+        // The celebrations run in order - first place, a pause, second, a pause, third - rather
+        // than all three at once, which read as a crowd rather than a podium. This is the place
+        // whose turn it is; each place waits for it, and hands it on once its own pose has
+        // finished and the pause has passed. Every early exit hands it on too, so a figure that
+        // never appears cannot leave the ones behind it standing there.
+        private static int _turn;
+        private const float TurnGap = 2f;
+
+        private static void HandOn(int place)
+        {
+            if (_turn == place) _turn = place + 1;
+        }
+
         /// <summary>
         /// End of frame, not end of Update. The client re-frames the player's avatar camera in
         /// its own LateUpdate, so a correction written from an ordinary coroutine step is
@@ -159,10 +172,10 @@ namespace PrizeTracker.Core
                                 Dictionary<AvatarCustomizationType, string> outfit, bool male,
                                 float blockH, Color blockColour)
         {
-            if (host == null || target == null || outfit == null) return;
             if (place < 0 || place >= Places) return;
+            if (host == null || target == null || outfit == null) { HandOn(place); return; }
             var ctrl = Controller(place);
-            if (ctrl == null) return;
+            if (ctrl == null) { HandOn(place); return; }
             host.StartCoroutine(Dress(ctrl, place, target, outfit, male, blockH, blockColour));
         }
 
@@ -195,15 +208,16 @@ namespace PrizeTracker.Core
             for (int f = 0; f < 3; f++) yield return null;
             _loading = false;
 
-            if (target == null) { _loading = false; yield break; }   // the screen closed mid-load
+            if (target == null) { _loading = false; HandOn(place); yield break; }   // the screen closed mid-load
             if (!Stage(ctrl, place, target, male, blockH, blockColour))
             {
                 Plugin.Log.LogWarning("podium " + place + ": no camera, so no figure.");
+                HandOn(place);
                 yield break;
             }
 
             var mgr = Mgr;
-            if (mgr == null) yield break;
+            if (mgr == null) { HandOn(place); yield break; }
 
             // A podium is a victory, so they play the animation the client plays when a player
             // wins a match - ONCE - and then settle into their idle and stay there. Cycling it
@@ -222,10 +236,22 @@ namespace PrizeTracker.Core
             string anim = null;
             try { anim = mgr.GetRandomVictoryAnimation(); }
             catch { }
-            if (string.IsNullOrEmpty(anim)) yield break;
+            if (string.IsNullOrEmpty(anim)) { HandOn(place); yield break; }
 
             var anims = Animators(ctrl);
-            if (anims.Length == 0) yield break;
+            if (anims.Length == 0) { HandOn(place); yield break; }
+
+            // Stand idle until it is this place's turn. Bounded: if a place ahead is never shown
+            // at all - a board with fewer than three players - nobody hands the turn on, and
+            // the ones behind should not wait forever for it.
+            float queued = 0f;
+            while (target != null && _turn < place && queued < 20f)
+            {
+                queued += Time.deltaTime;
+                yield return null;
+            }
+            if (target == null) { HandOn(place); yield break; }
+
             foreach (var a in anims) if (a != null) a.SetTrigger(anim);
 
             // Wait for the pose to actually start before asking how long it is - the trigger
@@ -237,13 +263,18 @@ namespace PrizeTracker.Core
                 waited += Time.deltaTime;
                 yield return null;
             }
-            if (target == null) yield break;
+            if (target == null) { HandOn(place); yield break; }
 
             float length = Length(anims[0]);
             if (length > Blend) yield return new WaitForSeconds(length - Blend);
-            if (target == null) yield break;
+            if (target == null) { HandOn(place); yield break; }
 
             foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
+
+            // The pose is over; a beat, then the next place goes. Detached from this figure's
+            // own life so closing the screen mid-pause does not stall anything.
+            yield return new WaitForSeconds(TurnGap);
+            HandOn(place);
 
 
             // Hold the framing. Setting it once is not enough for first place: that is the
@@ -563,6 +594,7 @@ namespace PrizeTracker.Core
         /// </summary>
         public static void Release(MonoBehaviour host)
         {
+            _turn = 0;
             for (int i = 0; i < Places; i++) Give(i);
 
             // Belt and braces: whatever Give() could not reach - a block orphaned by a hot
