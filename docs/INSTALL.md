@@ -12,7 +12,7 @@ rights are needed. Install takes about a minute.
 ## 1. Download
 
 Download **`ptcgl-leaderboard-setup.exe`** from the
-[latest release](https://github.com/Jxkobyte/PtcglLeaderboard/releases/latest).
+[latest release](https://github.com/Jxkobyte/ptcgl-leaderboard/releases/latest).
 
 **Close Pokémon TCG Live before you continue.**
 
