@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using SharedSDKUtils;
+using RainierClientSDK.Inventory;
 using TPCI.Avatar;
 using UnityEngine;
 using UnityEngine.UI;
@@ -51,6 +52,16 @@ namespace PtcglLeaderboard.Core
         /// of the outfit, so three concurrent loads would each overwrite the others' answer.
         /// </summary>
         private static bool _loading;
+
+        // Bumped by Release(). Every Dress() captures it and stops at its next step when it
+        // changes, so a figure still loading when the screen closes cannot finish AFTER the
+        // player's own avatar has been put back - which would dress the player as the bot again.
+        private static int _generation;
+
+        // Set once first place has been dressed. First place borrows the PLAYER's own avatar
+        // controller - the one the Home and Profile screens show - so only then is there
+        // anything of the player's to put back.
+        private static bool _playerDressed;
 
         // The celebrations start in order - first place, two seconds, second, two seconds,
         // third - rather than all three at once, which read as a crowd rather than a podium.
@@ -192,8 +203,10 @@ namespace PtcglLeaderboard.Core
             // three would race over it. Without this, a male outfit loaded onto a manager still
             // set to female produced no figure at all: no model, and no block either, because
             // staging never ran.
-            while (_loading) yield return null;
+            int gen = _generation;
+            while (_loading) { yield return null; if (gen != _generation) { HandOn(place); yield break; } }
             _loading = true;
+            if (place == 0) _playerDressed = true;
             try
             {
                 var m = Mgr;
@@ -205,6 +218,7 @@ namespace PtcglLeaderboard.Core
             // wrapped in a try/catch around the yield - a failure inside it is reported by the
             // client's own logging, and the worst case is a figure that does not appear.
             yield return ctrl.LoadAvatar(outfit);
+            if (gen != _generation) { _loading = false; yield break; }   // released mid-load
 
             // Let the figure settle before anything measures it. LoadAvatar returns once the
             // parts are requested, not once they are all in place, and the ground is read off
@@ -661,9 +675,39 @@ namespace PtcglLeaderboard.Core
                 if (mr != null && mr.gameObject.name == "PodiumBlock")
                     UnityEngine.Object.Destroy(mr.gameObject);
 
-            var ctrl = Controller(0);
-            if (host == null || ctrl == null) return;
-            try { host.StartCoroutine(ctrl.ResyncCurrentAvatar()); }
+            _generation++;
+            _loading = false;
+            RestorePlayerAvatar();
+        }
+
+        /// <summary>
+        /// Put the player's OWN avatar back on the player controller, from their saved outfit.
+        ///
+        /// This used to call the controller's ResyncCurrentAvatar(), which does not reload
+        /// anything: it only re-attaches animators to whatever models are loaded right now. So
+        /// after the podium had dressed first place, the player's Home and Profile avatar stayed
+        /// in the bot's outfit until the game next loaded it for itself. (Display only - nothing
+        /// in these calls saves to the account; confirmed by decompiling every outfit save in the
+        /// client, all of which are explicit Profile-editor actions.)
+        ///
+        /// AvatarManager.LoadPlayerAvatar() is the client's own load, the one it runs at startup:
+        /// it rebuilds the player controller from InventoryService.currentOutfit. The manager's
+        /// body-type flag is put back to the player's too - the podium sets it per figure.
+        /// </summary>
+        private static void RestorePlayerAvatar()
+        {
+            if (!_playerDressed) return;
+            _playerDressed = false;
+            try
+            {
+                var mgr = Mgr;
+                if (mgr == null) return;
+                var outfit = InventoryService.currentOutfit;
+                if (outfit != null) mgr.SetCurrentGender(outfit.look == AvatarLookType.Male);
+                mgr.StartCoroutine(mgr.LoadPlayerAvatar());
+                Plugin.Log.LogInfo("podium: restored the player's own avatar (" +
+                                   (outfit != null ? outfit.look.ToString() : "?") + ")");
+            }
             catch (Exception e) { Plugin.Log.LogWarning("podium: could not restore our avatar: " + e.Message); }
         }
     }

@@ -186,8 +186,19 @@ namespace PtcglLeaderboard.Core
         /// The podium borrows the client's own player/opponent/professor avatars, so leaving
         /// without restoring would show whoever topped the leaderboard on the profile screen.
         /// </summary>
+        // True only between OnActivate and OnDeactivate - while the player is LOOKING at this screen.
+        //
+        // activeInHierarchy is not that. The client hides screens by where they are parented, not
+        // by switching them off, so this screen is "active" from the moment it is installed. With
+        // only that check, a background refresh of the board re-rendered the hidden screen and
+        // dressed the podium - and first place borrows the PLAYER's own avatar controller - so the
+        // player's Home and Profile avatar turned into Professor Oak at startup, with nothing to put
+        // it back because the screen had never been opened and so was never closed.
+        private bool _open;
+
         public override void OnDeactivate(HUBGroupController nextGroup)
         {
+            _open = false;
             try { PodiumAvatars.Release(this); }
             catch (Exception e) { Plugin.Log.LogWarning("leaderboard: " + e.Message); }
             base.OnDeactivate(nextGroup);
@@ -196,6 +207,7 @@ namespace PtcglLeaderboard.Core
         public override void OnActivate(HUBGroupController prevGroup)
         {
             base.OnActivate(prevGroup);
+            _open = true;
             try
             {
                 Build();
@@ -215,7 +227,7 @@ namespace PtcglLeaderboard.Core
             FillArt();
             if (Time.unscaledTime < _nextTick) return;
             _nextTick = Time.unscaledTime + 1f;
-            if (!_built || !gameObject.activeInHierarchy) return;
+            if (!_built || !_open || !gameObject.activeInHierarchy) return;
 
             try
             {
@@ -527,8 +539,11 @@ namespace PtcglLeaderboard.Core
                 raw.color = new Color(1f, 1f, 1f, 0f);       // until its camera has something to show
                 NativeHistoryScreen.Place((RectTransform)stage.transform, 0.5f, 0, 0.5f, 0,
                                           0, 0, imgW, imgH);
-                PodiumAvatars.Show(this, place, raw, outfit, OutfitCode.IsMale(p.Outfit),
-                                   blockH, medal);
+                // Only while the screen is open: the podium borrows the player's own avatar, and
+                // only closing the screen gives it back.
+                if (_open)
+                    PodiumAvatars.Show(this, place, raw, outfit, OutfitCode.IsMale(p.Outfit),
+                                       blockH, medal);
 
                 // The numerals are placed from the GROUND, at one height and one size for all
                 // three, so they line up across the podium. Sizing and centring each one on its
