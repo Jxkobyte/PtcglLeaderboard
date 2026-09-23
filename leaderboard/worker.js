@@ -281,13 +281,13 @@ async function getLeaderboard(url, env, now) {
 
   const season = await env.DB.prepare('SELECT end_date FROM season WHERE season_id = ?').bind(seasonId).first();
   const total = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ? AND master = 1').bind(seasonId).first();
+    .prepare('SELECT COUNT(*) AS n FROM ' + BOARD).bind(seasonId).first();
 
   const rows = await env.DB
     // Master only, by ELO. Everyone below Master is still recorded - their history is kept and
     // they appear the moment they get there - but exp is what separates them and this is an ELO
     // board, so they are not ranked on it.
-    .prepare('SELECT * FROM standing WHERE season_id = ? AND master = 1 ORDER BY elo DESC, season_matches DESC, last_seen ASC LIMIT ?')
+    .prepare('SELECT * FROM ' + BOARD + ' ORDER BY elo DESC, season_matches DESC, last_seen ASC LIMIT ?')
     .bind(seasonId, limit).all();
 
   const players = (rows.results || []).map((r, i) => publicRow(r, i + 1, t));
@@ -359,11 +359,17 @@ async function resolveSeason(url, env) {
 }
 
 /** 1-based rank: how many standings sort strictly ahead, plus one. Same order as the board. */
+// The board: one row per player NAME, the most recently updated. Someone playing on two PCs has a
+// random id on each and so two standing rows, but both report the same account-wide season record,
+// so the newest one is the right one to show. "Player" is the placeholder a client sends before it
+// has learned its in-game name, so those rows are never merged with each other. Bind: season_id.
+const BOARD = "(SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY CASE WHEN display_name = 'Player' THEN player_id ELSE lower(display_name) END ORDER BY last_seen DESC) AS rn FROM standing WHERE season_id = ? AND master = 1) WHERE rn = 1)";
+
 async function rankOf(env, seasonId, elo, matches, master) {
   if (!master) return 0;   // unranked: below Master
   const r = await env.DB
-    .prepare('SELECT COUNT(*) AS n FROM standing WHERE season_id = ? AND master = 1 ' +
-             'AND (elo > ? OR (elo = ? AND season_matches > ?))')
+    .prepare('SELECT COUNT(*) AS n FROM ' + BOARD + ' ' +
+             'WHERE (elo > ? OR (elo = ? AND season_matches > ?))')
     .bind(seasonId, elo, elo, matches).first();
   return (r ? Number(r.n) : 0) + 1;
 }

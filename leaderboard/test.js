@@ -342,3 +342,26 @@ test('a new season starts with the sample players and none of the real ones', as
   const old = await get(e, c, '/v1/leaderboard?season=54');
   assert.deepEqual(old.body.players.map(p => p.displayName).sort(), ['Jakobi', 'Professor Oak']);
 });
+
+test('one player on two PCs shows once, as the most recent row', async () => {
+  const e = env(), c = clock();
+  assert.equal((await post(e, c, base)).status, 200);                       // PC 1
+  c.t += 3600;
+  const pc2 = { ...base, playerId: 'player-cccccccc', exp: 310, wins: 21, seasonMatches: 31, elo: 1510 };
+  assert.equal((await post(e, c, pc2)).status, 200);                        // PC 2, newer
+  c.t += 60;
+  const board = await get(e, c, '/v1/leaderboard?season=54&player=player-cccccccc');
+  assert.equal(board.body.total, 1);
+  assert.equal(board.body.players.length, 1);
+  assert.equal(board.body.players[0].elo, 1510);                            // the newest record
+  assert.equal(board.body.me.rank, 1);
+});
+
+test('players with no name yet are never merged with each other', async () => {
+  const e = env(), c = clock();
+  assert.equal((await post(e, c, { ...base, displayName: 'Player' })).status, 200);
+  c.t += 3600;
+  assert.equal((await post(e, c, { ...base, playerId: 'player-dddddddd', displayName: 'Player', elo: 1400 })).status, 200);
+  const board = await get(e, c, '/v1/leaderboard?season=54');
+  assert.equal(board.body.total, 2);
+});
