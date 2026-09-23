@@ -58,11 +58,8 @@ namespace PtcglLeaderboard.Core
         // player's own avatar has been put back - which would dress the player as the bot again.
         private static int _generation;
 
-        // Which places have been dressed, so Release puts back exactly those. All three borrow a
-        // controller the game itself uses - first place the PLAYER's (Home and Profile), second
-        // the OPPONENT's (the match intro), third the Learning Lab PROFESSOR's - and each has to be
-        // handed back the way the game expects to find it.
-        private static readonly bool[] _dressed = new bool[Places];
+        // Set once the podium has changed the manager's global body-type flag.
+        private static bool _setGender;
 
         // The celebrations start in order - first place, two seconds, second, two seconds,
         // third - rather than all three at once, which read as a crowd rather than a podium.
@@ -123,6 +120,16 @@ namespace PtcglLeaderboard.Core
             public RenderTexture OriginalTarget;
             public RenderTexture Ours;
             public GameObject Block;
+
+            // The camera exactly as the game had it. SetView does not move the camera, it
+            // RE-PARENTS it onto a body-specific mount (male/female x full/upper body), so giving
+            // back only a world position left it on the mount of whichever bot stood there: the
+            // player framed as Oak's male body in the Learning Lab, the professor out of shot.
+            public Transform RigT, RigParent;
+            public Vector3 RigLocalPos, RigLocalScale, CamLocalPos;
+            public Quaternion RigLocalRot, CamLocalRot;
+            public float CamFov;
+            public List<KeyValuePair<Animator, bool>> RootMotion = new List<KeyValuePair<Animator, bool>>();
             public List<Renderer> Hidden = new List<Renderer>();   // the client's own floor decals, put back on Give
 
         }
@@ -149,30 +156,90 @@ namespace PtcglLeaderboard.Core
         /// </summary>
         private static AvatarBaseController Controller(int place)
         {
+            if (place < 0 || place >= Places) return null;
+            if (_rigs[place] != null) return _rigs[place];
             var mgr = Mgr;
             if (mgr == null) return null;
             try
             {
-                switch (place)
+                var prefab = RigPrefab(mgr);
+                if (prefab == null) return null;
+                // Far from every scene the client builds (they sit near the origin), and far from
+                // each other, so no camera - ours or the client's - sees a figure that is not its own.
+                var at = new Vector3(RigOrigin + place * RigSpacing, 0f, 0f);
+                var t = UnityEngine.Object.Instantiate(prefab, at, Quaternion.identity);
+                t.name = RigName;
+                UnityEngine.Object.DontDestroyOnLoad(t.gameObject);
+                var ctrl = t.GetComponent<AvatarBaseController>();
+                if (ctrl == null) { UnityEngine.Object.Destroy(t.gameObject); return null; }
+                // The one set-up step the client does after instantiating (AvatarManager.
+                // InstantiateNecessaryObjects); the rest is the rig's own Awake.
+                try
                 {
-                    case 0: return mgr.GetPlayerAvatarController();
-                    case 1: return Opponent(mgr);
-                    case 2: return mgr.GetLearningLabProfAvatarController();
+                    var cam = ctrl.GetControllerCamera();
+                    if (cam != null) cam.SetResolutionProvider(ManagerSingleton<ResolutionManager>.instance);
                 }
+                catch { }
+                _rigs[place] = ctrl;
+                return ctrl;
             }
-            catch { }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning("podium: could not build a figure rig: " + e.Message);
+                return null;
+            }
+        }
+
+        // The podium's OWN avatar rigs - copies of the client's opponent rig, built for the podium
+        // and destroyed when it closes. The first versions BORROWED the client's own three rigs
+        // (player, opponent, Learning Lab professor) and tried to hand them back; every screen
+        // that uses those arranges them its own way (the Learning Lab places and turns both
+        // figures, the match intro loads the opponent in place), and a bot's outfit or the podium's
+        // framing kept leaking into them - the player dressed as Professor Oak, the opponent
+        // showing as Birch at match start, the professor missing from the lab. With rigs of our
+        // own, nothing of the client's is ever touched, so there is nothing to put back.
+        private const string RigName = "PtcglPodiumRig";
+        private const float RigOrigin = 20000f, RigSpacing = 500f;
+        private static readonly AvatarBaseController[] _rigs = new AvatarBaseController[Places];
+
+        private static Transform FindChild(Transform root, string name)
+        {
+            foreach (var c in root.GetComponentsInChildren<Transform>(true))
+                if (c != null && c.name == name) return c;
             return null;
         }
 
-        /// <summary>
-        /// The opponent group. Unlike the other two it has no accessor, so it is read off the
-        /// field - the only reflection here, and it degrades to "no figure" rather than throwing.
-        /// </summary>
-        private static AvatarBaseController Opponent(AvatarManager mgr)
+        /// <summary>The client's opponent rig prefab, which it loaded at startup.</summary>
+        private static Transform RigPrefab(AvatarManager mgr)
         {
-            var f = typeof(AvatarManager).GetField("_opponentAvatarController",
+            var f = typeof(AvatarManager).GetField("_opponentAvatarGroup",
                                                    BindingFlags.Instance | BindingFlags.NonPublic);
-            return f == null ? null : f.GetValue(mgr) as AvatarBaseController;
+            var prefab = f == null ? null : f.GetValue(mgr) as Transform;
+            if (prefab == null) prefab = Resources.Load<Transform>("Avatar/BaseObjects/OpponentAvatar");
+            return prefab;
+        }
+
+        /// <summary>Tear the rigs down: clothes back to the client's shared pool, then the rigs.</summary>
+        private static void DestroyRigs()
+        {
+            for (int i = 0; i < Places; i++)
+            {
+                var ctrl = _rigs[i];
+                _rigs[i] = null;
+                if (ctrl == null) continue;
+                // The item models come from the client's shared "Avatar" pool; destroying the rig
+                // with them still attached would destroy pooled objects the client still indexes.
+                try { ctrl.UnloadAvatar(); } catch { }
+                try { UnityEngine.Object.Destroy(ctrl.gameObject); } catch { }
+            }
+            // And any rig orphaned by a hot reload.
+            foreach (var t in Resources.FindObjectsOfTypeAll<Transform>())
+                if (t != null && t.name == RigName && t.parent == null && t.gameObject.scene.IsValid())
+                {
+                    var c = t.GetComponent<AvatarBaseController>();
+                    try { if (c != null) c.UnloadAvatar(); } catch { }
+                    UnityEngine.Object.Destroy(t.gameObject);
+                }
         }
 
         /// <summary>
@@ -207,11 +274,10 @@ namespace PtcglLeaderboard.Core
             int gen = _generation;
             while (_loading) { yield return null; if (gen != _generation) { HandOn(place); yield break; } }
             _loading = true;
-            _dressed[place] = true;
             try
             {
                 var m = Mgr;
-                if (m != null) m.SetCurrentGender(!male ? false : true);
+                if (m != null) { m.SetCurrentGender(!male ? false : true); _setGender = true; }
             }
             catch (Exception e) { Plugin.Log.LogWarning("podium: could not set the body type: " + e.Message); }
 
@@ -296,7 +362,6 @@ namespace PtcglLeaderboard.Core
             if (target == null) yield break;
 
             foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
-
 
             // Hold the framing. Setting it once is not enough for first place: that is the
             // PLAYER group, which the client drives for its own profile screen and re-frames
@@ -408,11 +473,33 @@ namespace PtcglLeaderboard.Core
                 var cam = camCtrl.GetComponentInChildren<Camera>(true);
                 if (cam == null) return false;
 
+                // Recorded BEFORE SetView, which re-parents the rig - see Borrowed.RigParent - and
+                // AFTER any earlier borrow of this place has been handed back, or a re-dress would
+                // record the podium's own framing as "how the game had it".
+                Give(place);
+                var rigT = camCtrl.transform;
+                var before = new Borrowed
+                {
+                    RigT = rigT, RigParent = rigT.parent,
+                    RigLocalPos = rigT.localPosition, RigLocalRot = rigT.localRotation,
+                    RigLocalScale = rigT.localScale,
+                    CamLocalPos = cam.transform.localPosition, CamLocalRot = cam.transform.localRotation,
+                    CamFov = cam.fieldOfView,
+                };
+                foreach (var an in Animators(ctrl))
+                    if (an != null) before.RootMotion.Add(new KeyValuePair<Animator, bool>(an, an.applyRootMotion));
+
                 try { camCtrl.SetView(AvatarCameraViewMode.FullBody, male); }
                 catch { }                                   // framing is a nicety, not a blocker
 
                 var held = Take(place, cam);
                 held.Ctrl = ctrl;
+                held.RigT = before.RigT; held.RigParent = before.RigParent;
+                held.RigLocalPos = before.RigLocalPos; held.RigLocalRot = before.RigLocalRot;
+                held.RigLocalScale = before.RigLocalScale;
+                held.CamLocalPos = before.CamLocalPos; held.CamLocalRot = before.CamLocalRot;
+                held.CamFov = before.CamFov;
+                held.RootMotion = before.RootMotion;
 
                 // The ground is MEASURED from the figure; the height above it is FIXED.
                 //
@@ -458,7 +545,6 @@ namespace PtcglLeaderboard.Core
                 SweepStaleBlocks(layer);
                 held.Block = MakeBlock(layer, blockAt, feet, blockH, blockColour);
                 HideFloorDecals(held, layer);
-
 
                 // Frame the block AND the figure. Visible height at a perspective camera is
                 // 2 * distance * tan(fov / 2), so the distance follows from how much has to fit -
@@ -549,23 +635,55 @@ namespace PtcglLeaderboard.Core
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)
             {
-                // The client is on a scriptable pipeline, so Standard may not exist here; fall
-                // through until something does rather than shipping a magenta block.
-                var sh = Shader.Find("Universal Render Pipeline/Lit")
-                      ?? Shader.Find("Standard")
-                      ?? Shader.Find("Unlit/Color");
-                if (sh != null)
-                {
-                    var mat = new Material(sh) { color = colour };
-                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", colour);
-                    mr.sharedMaterial = mat;
-                }
+                // UNLIT, so the colour is exactly the medal colour. The rigs stand far from every
+                // scene, lit only by the rig's own tinted light, and a lit block came out blue for
+                // silver and olive for gold. Lighting was also the only thing giving the block its
+                // shape, so the top face is a separate, darker piece (below).
+                mr.sharedMaterial = UnlitMaterial(colour);
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 // The figure was dropping a shadow onto the block's top face, which came out as a
                 // pale ring under its feet rather than anything shadow-shaped.
                 mr.receiveShadows = false;
             }
+
+            // The top face, a shade darker, just proud of the cube so the two never fight.
+            var top = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            top.name = "PodiumBlockTop";
+            foreach (var c in top.GetComponents<Component>())
+                if (c != null && c.GetType().Name.EndsWith("Collider", StringComparison.Ordinal))
+                    UnityEngine.Object.Destroy(c);
+            top.layer = layer;
+            top.transform.SetParent(cube.transform, false);
+            top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
+            top.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            top.transform.localScale = Vector3.one;
+            var tr = top.GetComponent<MeshRenderer>();
+            if (tr != null)
+            {
+                tr.sharedMaterial = UnlitMaterial(new Color(colour.r * 0.72f, colour.g * 0.72f, colour.b * 0.72f, 1f));
+                tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                tr.receiveShadows = false;
+            }
             return cube;
+        }
+
+        private static bool _shaderLogged;
+
+        /// <summary>A flat colour, whatever the lighting. Falls through to anything that exists.</summary>
+        private static Material UnlitMaterial(Color colour)
+        {
+            // UI/Default first: it is unlit and it is guaranteed to be in the build, because the
+            // client's entire interface is drawn with it. The URP and built-in unlit shaders were
+            // stripped from this client, so asking for them fell through to a LIT shader - which
+            // is why the blocks kept changing colour with whatever light reached them.
+            var sh = Shader.Find("UI/Default") ?? Shader.Find("Universal Render Pipeline/Unlit")
+                  ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default")
+                  ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            if (sh == null) return null;
+            if (!_shaderLogged) { _shaderLogged = true; Plugin.Log.LogInfo("podium: blocks drawn with " + sh.name); }
+            var mat = new Material(sh) { color = colour };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", colour);
+            return mat;
         }
 
         /// <summary>
@@ -593,7 +711,10 @@ namespace PtcglLeaderboard.Core
         {
             try
             {
-                foreach (var r in UnityEngine.Object.FindObjectsOfType<Renderer>())
+                // Only inside our own rig: the layer is shared with the client's real opponent.
+                var rig = held.Ctrl != null ? held.Ctrl.transform : null;
+                if (rig == null) return;
+                foreach (var r in rig.GetComponentsInChildren<Renderer>(true))
                 {
                     if (r == null || r.gameObject.layer != layer) continue;
                     if (!r.enabled && r.GetComponent<PodiumHidden>() == null) continue;   // the client's own doing
@@ -624,6 +745,11 @@ namespace PtcglLeaderboard.Core
             {
                 if (mr == null || mr.gameObject.layer != layer) continue;
                 if (mr.gameObject.name != "PodiumBlock") continue;
+                // All three rigs share a layer now, so "on this layer" includes the other places'
+                // live blocks. Only a block no place owns is stale.
+                bool live = false;
+                for (int i = 0; i < Places; i++) if (_held[i] != null && _held[i].Block == mr.gameObject) live = true;
+                if (live) continue;
                 UnityEngine.Object.Destroy(mr.gameObject);
                 swept++;
             }
@@ -641,11 +767,26 @@ namespace PtcglLeaderboard.Core
                 // Resumed defensively: nothing here pauses it any more, but an earlier visit
                 // that held a pose did, and a camera handed back paused never redraws.
                 if (held.Ctrl != null) held.Ctrl.ResumeAvatarCamera(false);
+                if (held.RigT != null)
+                {
+                    held.RigT.SetParent(held.RigParent, false);
+                    held.RigT.localPosition = held.RigLocalPos;
+                    held.RigT.localRotation = held.RigLocalRot;
+                    held.RigT.localScale = held.RigLocalScale;
+                }
                 if (held.Cam != null)
                 {
-                    held.Cam.transform.position = held.CamPos;
+                    if (held.RigT != null)
+                    {
+                        held.Cam.transform.localPosition = held.CamLocalPos;
+                        held.Cam.transform.localRotation = held.CamLocalRot;
+                        held.Cam.fieldOfView = held.CamFov;
+                    }
+                    else held.Cam.transform.position = held.CamPos;
                     held.Cam.targetTexture = held.OriginalTarget;
                 }
+                foreach (var kv in held.RootMotion)
+                    if (kv.Key != null) kv.Key.applyRootMotion = kv.Value;
                 if (held.Block != null) UnityEngine.Object.Destroy(held.Block);
                 foreach (var r in held.Hidden)
                 {
@@ -678,86 +819,27 @@ namespace PtcglLeaderboard.Core
 
             _generation++;
             _loading = false;
-            RestorePlayerAvatar();
-            ClearOpponentAvatar();
-            RestoreProfessorAvatar();
+            DestroyRigs();
+            RestoreBodyType();
         }
 
         /// <summary>
-        /// Leave the opponent controller EMPTY rather than wearing a bot's outfit.
-        ///
-        /// A match loads the real opponent into it (VersusScreenController -> LoadOpponentAvatar),
-        /// but a leftover figure was visible for a moment at match start before that load replaced
-        /// it - a podium bot standing in as the opponent. Empty is what the game itself leaves
-        /// there after a match (AvatarManager.UnloadAvatar(false)); the controller's own unload is
-        /// used rather than the manager's, which also drops the controller's camera registration.
+        /// The manager's body-type flag is global - the podium sets it for each figure before
+        /// loading - so it goes back to the player's own. It only steers camera framing, but the
+        /// client's cameras read it.
         /// </summary>
-        private static void ClearOpponentAvatar()
+        private static void RestoreBodyType()
         {
-            if (!_dressed[1]) return;
-            _dressed[1] = false;
-            try
-            {
-                var ctrl = Controller(1);
-                if (ctrl == null) return;
-                ctrl.UnloadAvatar();
-                Plugin.Log.LogInfo("podium: cleared the opponent avatar");
-            }
-            catch (Exception e) { Plugin.Log.LogWarning("podium: could not clear the opponent avatar: " + e.Message); }
-        }
-
-        /// <summary>
-        /// Put the Learning Lab professor back. The lab never reloads him - it only checks that
-        /// he IS loaded - so emptying this controller would leave the lab without its professor.
-        /// Instead the bot's outfit (and any NPC half-state) is cleared and the game's own startup
-        /// load, AvatarManager.LoadLearningLabProfAvatar(), is run again.
-        /// </summary>
-        private static void RestoreProfessorAvatar()
-        {
-            if (!_dressed[2]) return;
-            _dressed[2] = false;
+            if (!_setGender) return;
+            _setGender = false;
             try
             {
                 var mgr = Mgr;
-                var ctrl = Controller(2);
-                if (mgr == null || ctrl == null) return;
-                ctrl.UnloadAvatar();
-                ctrl.UnloadNpc();
-                mgr.StartCoroutine(mgr.LoadLearningLabProfAvatar());
-                Plugin.Log.LogInfo("podium: restored the Learning Lab professor");
-            }
-            catch (Exception e) { Plugin.Log.LogWarning("podium: could not restore the professor: " + e.Message); }
-        }
-
-        /// <summary>
-        /// Put the player's OWN avatar back on the player controller, from their saved outfit.
-        ///
-        /// This used to call the controller's ResyncCurrentAvatar(), which does not reload
-        /// anything: it only re-attaches animators to whatever models are loaded right now. So
-        /// after the podium had dressed first place, the player's Home and Profile avatar stayed
-        /// in the bot's outfit until the game next loaded it for itself. (Display only - nothing
-        /// in these calls saves to the account; confirmed by decompiling every outfit save in the
-        /// client, all of which are explicit Profile-editor actions.)
-        ///
-        /// AvatarManager.LoadPlayerAvatar() is the client's own load, the one it runs at startup:
-        /// it rebuilds the player controller from InventoryService.currentOutfit. The manager's
-        /// body-type flag is put back to the player's too - the podium sets it per figure.
-        /// </summary>
-        private static void RestorePlayerAvatar()
-        {
-            if (!_dressed[0]) return;
-            _dressed[0] = false;
-            try
-            {
-                var mgr = Mgr;
-                if (mgr == null) return;
                 var outfit = InventoryService.currentOutfit;
-                if (outfit != null) mgr.SetCurrentGender(outfit.look == AvatarLookType.Male);
-                mgr.StartCoroutine(mgr.LoadPlayerAvatar());
-                Plugin.Log.LogInfo("podium: restored the player's own avatar (" +
-                                   (outfit != null ? outfit.look.ToString() : "?") + ")");
+                if (mgr != null && outfit != null) mgr.SetCurrentGender(outfit.look == AvatarLookType.Male);
             }
-            catch (Exception e) { Plugin.Log.LogWarning("podium: could not restore our avatar: " + e.Message); }
+            catch { }
         }
+
     }
 }
