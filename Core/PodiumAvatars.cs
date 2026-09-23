@@ -139,9 +139,10 @@ namespace PrizeTracker.Core
             var mgr = Mgr;
             if (mgr == null) yield break;
 
-            // A podium is a victory, so they play the animations the client plays when a player
-            // wins a match - and then ease back into their idle instead of snapping out of the
-            // pose.
+            // A podium is a victory, so they play the animation the client plays when a player
+            // wins a match - ONCE - and then settle into their idle and stay there. Cycling it
+            // meant a figure lurching back into a celebration every few seconds for as long as
+            // the screen was open, which is a lot of movement for a leaderboard.
             //
             // The snap is the client's, and it cannot be turned off from outside. PlayPoseAnimation
             // takes a forceIdle flag but its body ignores it, always finishing with
@@ -152,42 +153,37 @@ namespace PrizeTracker.Core
             //
             // Holding the final pose was the other way to avoid the cut, and it looked like a
             // photograph rather than a person.
-            while (target != null)
+            string anim = null;
+            try { anim = mgr.GetRandomVictoryAnimation(); }
+            catch { }
+            if (string.IsNullOrEmpty(anim)) yield break;
+
+            var anims = Animators(ctrl);
+            if (anims.Length == 0) yield break;
+            foreach (var a in anims) if (a != null) a.SetTrigger(anim);
+
+            // Wait for the pose to actually start before asking how long it is - the trigger
+            // takes a frame or two to leave idle, and asking too early measures the idle.
+            // Bounded, so a pose the controller has no state for cannot hang this.
+            float waited = 0f;
+            while (target != null && waited < 2f && IsIdle(anims[0]))
             {
-                string anim = null;
-                try { anim = mgr.GetRandomVictoryAnimation(); }
-                catch { }
-                if (string.IsNullOrEmpty(anim)) yield break;
-
-                var anims = Animators(ctrl);
-                if (anims.Length == 0) yield break;
-                foreach (var a in anims) if (a != null) a.SetTrigger(anim);
-
-                // Wait for the pose to actually start before asking how long it is - the trigger
-                // takes a frame or two to leave idle, and asking too early measures the idle.
-                // Bounded, so a pose the controller has no state for cannot hang the loop.
-                float waited = 0f;
-                while (target != null && waited < 2f && IsIdle(anims[0]))
-                {
-                    waited += Time.deltaTime;
-                    yield return null;
-                }
-                if (target == null) yield break;
-
-                float length = Length(anims[0]);
-                if (length > Blend) yield return new WaitForSeconds(length - Blend);
-                if (target == null) yield break;
-
-                foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
-                yield return new WaitForSeconds(RestSeconds + place * 0.8f);
+                waited += Time.deltaTime;
+                yield return null;
             }
+            if (target == null) yield break;
+
+            float length = Length(anims[0]);
+            if (length > Blend) yield return new WaitForSeconds(length - Blend);
+            if (target == null) yield break;
+
+            foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
         }
 
         // Short. A long blend reads as the figure drifting out of the pose rather than
         // finishing it, and because the fade starts that far before the animation ends, it also
         // eats that much of the pose itself.
         private const float Blend = 0.15f;
-        private const float RestSeconds = 3f;
         private static readonly int IdleHash = Animator.StringToHash("idle");
 
         private static bool IsIdle(Animator a)
