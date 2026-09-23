@@ -120,11 +120,24 @@ namespace PtcglLeaderboard
                   (_season.EndUtc.HasValue ? _season.EndUtc.Value.ToString("u") : "?") +
                   " (" + _season.Leagues.Count + " leagues)");
 
+            // The id is backed up outside the game folder, because a PTCGL update can wipe the
+            // config file it lives in. An empty config with a backup present is exactly that case:
+            // restore rather than mint a new id and become a second player on the board.
             if (string.IsNullOrEmpty(_cfgLbPlayerId.Value))
             {
-                _cfgLbPlayerId.Value = Leaderboard.NewPlayerId();
-                Log.LogInfo("leaderboard: generated player id");
+                var saved = DataPaths.ReadPlayerId();
+                if (saved != null)
+                {
+                    _cfgLbPlayerId.Value = saved;
+                    Log.LogInfo("leaderboard: restored player id from " + DataPaths.PlayerIdFile);
+                }
+                else
+                {
+                    _cfgLbPlayerId.Value = Leaderboard.NewPlayerId();
+                    Log.LogInfo("leaderboard: generated player id");
+                }
             }
+            DataPaths.WritePlayerId(_cfgLbPlayerId.Value, m => Log.LogWarning(m));
             _board = _host.AddComponent<Leaderboard>();
             _board.DisplayName = _cfgLbName.Value;
             _board.ApiBase = _cfgLbApi.Value;

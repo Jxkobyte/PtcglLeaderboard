@@ -723,6 +723,16 @@ namespace PtcglLeaderboard.Core
 
 
         /// <summary>Show the season's plaque, if the client happens to have that art loaded.</summary>
+        /// <summary>Follow the leaderboard's season, which is re-read when the game's changes.</summary>
+        private void SyncSeason()
+        {
+            if (Board == null || Board.Season == null || ReferenceEquals(Board.Season, Season)) return;
+            Season = Board.Season;
+            _plaqueArt = null;          // a new season has a new expansion plaque
+            _plaqueLogged = false;
+            ShowPlaque();
+        }
+
         private void ShowPlaque()
         {
             if (_plaque == null) return;
@@ -752,6 +762,7 @@ namespace PtcglLeaderboard.Core
 
         private void UpdateStatus()
         {
+            SyncSeason();
             var st = Board != null ? Board.State : null;
             var now = DateTime.UtcNow;
 

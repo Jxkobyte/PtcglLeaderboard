@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 
 namespace PtcglLeaderboard.Core
@@ -26,6 +26,33 @@ namespace PtcglLeaderboard.Core
 
         public static string MatchLog => Path.Combine(Root, "matches.jsonl");
         public static string Avatars => Path.Combine(Root, "avatars");
+
+        /// <summary>
+        /// A copy of the leaderboard PlayerId. The real one lives in the BepInEx config file, and
+        /// BepInEx\config is inside the folder a PTCGL update can wipe - losing it means a fresh
+        /// random id, i.e. the player turns up on the board as somebody new. This copy survives.
+        /// </summary>
+        public static string PlayerIdFile => Path.Combine(Root, "player-id.txt");
+
+        /// <summary>The saved PlayerId, or null. Never throws.</summary>
+        public static string ReadPlayerId()
+        {
+            try
+            {
+                if (!File.Exists(PlayerIdFile)) return null;
+                var id = File.ReadAllText(PlayerIdFile).Trim();
+                return id.Length > 0 ? id : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Save the PlayerId if the copy is missing or different. Never throws.</summary>
+        public static void WritePlayerId(string id, Action<string> log = null)
+        {
+            if (string.IsNullOrEmpty(id) || id == ReadPlayerId()) return;
+            try { Directory.CreateDirectory(Root); File.WriteAllText(PlayerIdFile, id); }
+            catch (Exception ex) { log?.Invoke("could not save the player id: " + ex.Message); }
+        }
 
         /// <summary>Folder names this data has lived under inside BepInEx\config, oldest first.</summary>
         private static readonly string[] LegacyFolders = { "PrizeTracker", "PtcglLeaderboard" };

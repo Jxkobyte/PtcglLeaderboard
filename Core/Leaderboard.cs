@@ -97,10 +97,25 @@ namespace PtcglLeaderboard.Core
         private float _nextNameCheck;
         private bool _loggedRank;
 
+        // The season is re-read from the client's cache while the game runs, so a reset is picked
+        // up without a restart. Keyed on the current-season file's write time: cheap to check.
+        private float _nextSeasonCheck;
+        private DateTime _seasonStamp;
+
+        /// <summary>Raised on the main thread when the current season changes (a reset).</summary>
+        public Action OnSeasonChanged;
+
         private void Update()
         {
             Action a;
             while (_mainThread.TryDequeue(out a)) { try { a(); } catch (Exception e) { Plugin.Log.LogWarning("leaderboard: " + e.Message); } }
+
+            if (Time.unscaledTime >= _nextSeasonCheck)
+            {
+                _nextSeasonCheck = Time.unscaledTime + 60f;
+                try { CheckSeason(); }
+                catch (Exception e) { Plugin.Log.LogWarning("leaderboard: season check failed: " + e.Message); }
+            }
 
             // Report the season record once it is readable, ONCE. exp and competitiveElo are
             // different numbers from the same object and it matters which the board shows: exp
@@ -125,6 +140,13 @@ namespace PtcglLeaderboard.Core
                         Plugin.Log.LogWarning("season record: season=" + idx + " exp=" + e +
                             " wins=" + w + " losses=" + l + " matches=" + m +
                             " | competitiveElo: " + (elo.Length == 0 ? "(empty)" : elo));
+
+                        // Submit once per session as soon as the record is readable, not only after
+                        // a match. Otherwise a new player who installs and opens the board does not
+                        // appear on it until they finish a game - which reads as "broken" - and a
+                        // submit that failed offline stays missing until the next match. The data is
+                        // the same season record the after-match submit sends.
+                        if (Configured) StartCoroutine(SubmitLater(3f));
                     }
                 }
                 catch { }
@@ -150,6 +172,34 @@ namespace PtcglLeaderboard.Core
 
         // -----------------------------------------------------------------------------------
         // submit
+
+        /// <summary>
+        /// Re-read the season from the client's cache when its current-season document changes.
+        /// The client downloads that document itself when a season rolls over; reading it once at
+        /// startup meant a reset during a session - or a document refreshed after the plugin had
+        /// loaded - showed the old season, its plaque and its countdown until the next restart.
+        /// </summary>
+        private void CheckSeason()
+        {
+            var file = System.IO.Path.Combine(Season.DefaultCacheDir(), "season_current_0.0.json");
+            if (!System.IO.File.Exists(file)) return;
+            var stamp = System.IO.File.GetLastWriteTimeUtc(file);
+            if (stamp == _seasonStamp) return;
+            bool first = _seasonStamp == default(DateTime);
+            _seasonStamp = stamp;
+            if (first && Season != null) return;         // what Plugin loaded at startup is current
+
+            var fresh = Season.Load(Season.DefaultCacheDir());
+            if (fresh == null) return;
+            if (Season != null && fresh.Id == Season.Id && fresh.EndUtc == Season.EndUtc) return;
+
+            Plugin.Log.LogInfo("leaderboard: season is now " + fresh.Id + " (was " +
+                               (Season != null ? Season.Id.ToString() : "none") + ")");
+            Season = fresh;
+            State = null;                                // the old season's board is not this one's
+            Refresh(true);
+            if (OnSeasonChanged != null) OnSeasonChanged();
+        }
 
         /// <summary>A name remembered from an earlier session.</summary>
         public void SetLearnedName(string name)
@@ -199,9 +249,20 @@ namespace PtcglLeaderboard.Core
             // earlier, on a board nobody is looking at.
             int seasonId = Season != null && Season.Id > 0 ? Season.Id : (int)seasonIdx;
             if (seasonId <= 0) { LastSubmit = "no season"; return; }
-            if (seasonIdx > 0 && Season != null && Season.Id > 0 && (int)seasonIdx != Season.Id)
-                Plugin.Log.LogInfo("leaderboard: SeasonRank says season " + seasonIdx +
-                                   ", config says " + Season.Id + "; using the config.");
+            // Never carry one season's record onto the next season's board. The client's
+            // SeasonRank.seasonIndex runs one behind the season id (index 53 during season 54 -
+            // the counters continue smoothly across that pairing in the submitted history), so a
+            // record is current exactly when index + 1 == id. Right after a reset the config
+            // already names the new season while SeasonRank still holds the OLD record; submitting
+            // then would put last season's rank on the new board. Skip it - the next submit, once
+            // the client has refreshed SeasonRank, sends the real one.
+            if (seasonIdx > 0 && Season != null && Season.Id > 0 && (int)seasonIdx + 1 != Season.Id)
+            {
+                LastSubmit = "season record not updated for season " + Season.Id + " yet";
+                Plugin.Log.LogInfo("leaderboard: the game's season record is for season " + (seasonIdx + 1) +
+                                   ", not " + Season.Id + " yet; nothing submitted.");
+                return;
+            }
 
             var body = new JObject
             {
@@ -298,7 +359,11 @@ namespace PtcglLeaderboard.Core
             _nextRefreshAllowed = Time.unscaledTime + 30f;
             if (string.IsNullOrEmpty(ApiBase)) { LastError = "no server configured"; return; }
 
+            // Ask for the season the CLIENT says is current rather than the newest one the service
+            // has seen: straight after a reset nobody has submitted to the new season yet, and the
+            // service's newest would still be the one that just ended.
             var path = "/v1/leaderboard?limit=100" +
+                       (Season != null && Season.Id > 0 ? "&season=" + Season.Id : "") +
                        (string.IsNullOrEmpty(PlayerId) ? "" : "&player=" + Uri.EscapeDataString(PlayerId));
             Busy = true;
             Get(path, (ok, text) =>
