@@ -22,7 +22,7 @@ namespace PrizeTracker.Core
     ///
     /// The match hold exists because a reload resets statics and kills coroutines - it drops
     /// everything the tracker has worked out, so a build landing mid-game would silently wipe the
-    /// solved prizes and leave the display looking broken. Rather than cancel the reload, which
+    /// tracked match state and leave the display looking broken. Rather than cancel the reload,
     /// would quietly lose the build, it keeps pushing ScriptEngine's own countdown out while a
     /// match is running and lets it fire the moment the match ends.
     /// </summary>
@@ -83,7 +83,7 @@ namespace PrizeTracker.Core
         private void Update()
         {
             // Nothing to do. A reload used to be held back while a match was running, on the
-            // belief that it would wipe the solved prizes - and that belief was simply wrong.
+            // belief that it would wipe the match's tracked state - and that was simply wrong.
             // The client keeps the identified deck in MatchInfo.matchEntities, so after a reload
             // the tracker re-derives the solve from the board within a tick. Measured, not
             // assumed: a reload mid-match logged "should solve" and re-dressed every prize

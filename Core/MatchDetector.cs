@@ -147,12 +147,6 @@ namespace PrizeTracker.Core
                 rec.MyDeck, string.IsNullOrEmpty(rec.Opponent) ? "?" : rec.Opponent,
                 string.IsNullOrEmpty(rec.OppArchetype) ? "?" : rec.OppArchetype, rec.Result,
                 string.IsNullOrEmpty(rec.Log) ? "NOT captured" : rec.Log.Length + " chars"));
-            _log.LogWarning(string.Format(
-                "prize solve: fewest unidentified deck cards seen this match = {0}{1}",
-                _tracker.MinDeckUnknown == int.MaxValue ? "never measured" : _tracker.MinDeckUnknown.ToString(),
-                _tracker.PrizesSolved ? " (prizes SOLVED)"
-                    : _tracker.MinDeckUnknown == 0 ? " (full reveal seen but solve did not fire - BUG)"
-                    : " (no full deck reveal observed - a deck search is what makes prizes solvable)"));
         }
 
         private int _lastTurn;

@@ -44,6 +44,12 @@ namespace PrizeTracker.Core
         private const float FigureHeight = 1.80f;
 
         /// <summary>
+        /// One figure loads at a time. The body type is a global on AvatarManager rather than part
+        /// of the outfit, so three concurrent loads would each overwrite the others' answer.
+        /// </summary>
+        private static bool _loading;
+
+        /// <summary>
         /// How wide a block is, in world units. Public because the podium has to space its columns
         /// exactly this far apart for the three to meet without overlapping, and a number the two
         /// sides each keep their own copy of is a number that drifts apart.
@@ -141,12 +147,27 @@ namespace PrizeTracker.Core
                                          Dictionary<AvatarCustomizationType, string> outfit,
                                          bool male, float blockH, Color blockColour)
         {
+            // Which BODY to build is a global on the manager, not part of the outfit, so it has
+            // to be set before the load - and only one figure can be loading at a time or the
+            // three would race over it. Without this, a male outfit loaded onto a manager still
+            // set to female produced no figure at all: no model, and no block either, because
+            // staging never ran.
+            while (_loading) yield return null;
+            _loading = true;
+            try
+            {
+                var m = Mgr;
+                if (m != null) m.SetCurrentGender(!male ? false : true);
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("podium: could not set the body type: " + e.Message); }
+
             // LoadAvatar pulls each item's asset bundle, so this takes real time and must not be
             // wrapped in a try/catch around the yield - a failure inside it is reported by the
             // client's own logging, and the worst case is a figure that does not appear.
             yield return ctrl.LoadAvatar(outfit);
+            _loading = false;
 
-            if (target == null) yield break;     // the screen closed while we were loading
+            if (target == null) { _loading = false; yield break; }   // the screen closed mid-load
             if (!Stage(ctrl, place, target, male, blockH, blockColour))
             {
                 Plugin.Log.LogWarning("podium " + place + ": no camera, so no figure.");

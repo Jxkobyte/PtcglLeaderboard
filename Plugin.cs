@@ -30,9 +30,6 @@ namespace PrizeTracker
         private readonly Harmony _harmony = new Harmony(ID);
 
         private GameObject _host;
-        private PrizeViewProbe _prizeProbe;
-        private PrizeReveal _reveal;
-        private PrizeShapeProbe _shapeProbe;
         private Tracker _tracker;
         private MatchDetector _detector;
         private MatchHistory _history;
@@ -162,10 +159,6 @@ namespace PrizeTracker
             _settings.Board = _board;
             _settings.OnChanged = SaveSettings;
 
-            _prizeProbe = _host.AddComponent<PrizeViewProbe>();
-            _shapeProbe = _host.AddComponent<PrizeShapeProbe>();
-            _reveal = _host.AddComponent<PrizeReveal>();
-            _reveal.Tracker = _tracker;
 
 
             _detector = _host.AddComponent<MatchDetector>();
@@ -214,9 +207,6 @@ namespace PrizeTracker
             // The prize display lives inside the client's own prize drawer, so there is nothing
             // to show, hide or toggle - it appears exactly when you open your prizes.
             bool inMatch = Game.InMatch();
-            if (_prizeProbe != null) _prizeProbe.InMatch = inMatch;
-            if (_shapeProbe != null) _shapeProbe.InMatch = inMatch;
-            if (_reveal != null) _reveal.InMatch = inMatch;
 
             if (_detector == null) return;
 
