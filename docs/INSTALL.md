@@ -94,6 +94,23 @@ You're identified by a random ID the mod creates, not your Pokémon Trainer Club
 Nothing about your opponents is ever sent: not their names, decks or games. Your match history stays
 on your computer, in `%LOCALAPPDATA%\PtcglLeaderboard`.
 
+## Will I get banned for using this?
+
+Honest answer: nobody can promise either way, but here's where it stands.
+
+- **We're not aware of anyone being banned for it**, and Pokémon TCG Live has no anti-cheat that
+  looks for mods.
+- **It's built to give no advantage.** During a match it only notes that one started and how it
+  ended: it doesn't show you anything, doesn't automate anything, and doesn't change cards, decks or
+  games. It sends nothing to The Pokémon Company. The only thing it sends anywhere is your own season
+  record, to this mod's leaderboard.
+- **But it is a modification of the game**, and game terms generally don't allow third-party mods,
+  so using this (like any mod) is technically against them. The Pokémon Company could change how
+  they handle that at any time.
+
+If that risk isn't for you, don't install it. If you do and change your mind, uninstalling puts the
+game back exactly as it was.
+
 ## Updating
 
 When a new version comes out, the **Leaderboard & Match History** shortcut tells you as you start
