@@ -6,7 +6,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PrizeTracker.Core
+namespace PtcglLeaderboard.Core
 {
     /// <summary>
     /// Stores a picture of each player's avatar as it appeared on the end-game screen, so a match
@@ -27,9 +27,14 @@ namespace PrizeTracker.Core
             new Dictionary<string, Texture2D>();
         private static readonly HashSet<string> _missing = new HashSet<string>();
 
+        /// <summary>
+        /// Outside the game folder, like the match log: a PTCGL update wipes BepInEx\. Losing
+        /// these only costs a re-render rather than real data, but there is no reason to keep a
+        /// cache somewhere that gets deleted. See DataPaths.
+        /// </summary>
         public static string Folder
         {
-            get { return Path.Combine(BepInEx.Paths.ConfigPath, "PrizeTracker/avatars"); }
+            get { return DataPaths.Avatars; }
         }
 
         /// <summary>

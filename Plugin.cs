@@ -45,7 +45,7 @@ namespace PtcglLeaderboard
 
         // The one persisted setting: whether the mod is on at all. Sharing the season record
         // with the leaderboard is part of what the mod does, not a separate switch.
-        private ConfigEntry<bool> _cfgEnabled;
+        private ConfigEntry<bool> _cfgEnabled, _cfgMigrated;
 
         // community leaderboard identity - managed automatically, no switches
         private ConfigEntry<string> _cfgLbName, _cfgLbLearnedName, _cfgLbApi, _cfgLbPlayerId;
@@ -63,9 +63,12 @@ namespace PtcglLeaderboard
             // Core has no BepInEx dependency by design, so it is handed a log sink instead.
             Tracker.Diagnostic = msg => Log.LogWarning(msg);
 
-            // Match log lives beside the plugin config so it survives game updates.
-            var historyPath = System.IO.Path.Combine(Paths.ConfigPath, "PtcglLeaderboard", "matches.jsonl");
-            _history = new MatchHistory(historyPath);
+            // The match log lives OUTSIDE the game folder, in %LOCALAPPDATA%. Anything under
+            // BepInEx\ sits inside the folder a PTCGL update can wipe, and history is the one
+            // thing no repair can ever put back - we have no copy of the user's own record. The
+            // old comment here claimed config survived updates; it is exactly what does not.
+            DataPaths.MigrateFromLegacy(Paths.ConfigPath, m => Log.LogInfo(m));
+            _history = new MatchHistory(DataPaths.MatchLog);
             _history.Load();
             DeckBadge.History = _history;
 
@@ -106,7 +109,7 @@ namespace PtcglLeaderboard
                 if (n == 0) Log.LogWarning("no methods were patched - deck win-rate badges will not appear.");
             }
             catch (Exception e) { Log.LogWarning("deck screen patch failed: " + e.Message); }
-            Log.LogInfo("Match history: " + _history.Count + " recorded (" + historyPath + ")");
+            Log.LogInfo("Match history: " + _history.Count + " recorded (" + DataPaths.MatchLog + ")");
             // ---- community leaderboard -------------------------------------------------
             // Season id, end date and the league ladder, from the client's own cached config
             // documents - the same response the client reads.
@@ -166,7 +169,7 @@ namespace PtcglLeaderboard
             _detector.Board = _board;
             _detector.Initialize(Log, _tracker);
 
-            // The PRIZE TRACKER card in the client's Settings screen: the one switch.
+            // The LEADERBOARD & MATCH HISTORY card in the client's Settings screen: the one switch.
             _settings = _host.AddComponent<SettingsSection>();
             _settings.IsEnabled = () => _cfgEnabled.Value;
             _settings.SetEnabled = ApplyEnabled;
@@ -182,17 +185,74 @@ namespace PtcglLeaderboard
             _cfgEnabled = Config.Bind("General", "Enabled", true,
                 "Whether the mod is on. Off switches off everything - the MATCH HISTORY and " +
                 "LEADERBOARD tabs, deck win-rate badges, match recording and sharing your season " +
-                "record with the leaderboard - except the PRIZE TRACKER card in Settings, where " +
+                "record with the leaderboard - except this mod's card in Settings, where " +
                 "it can be switched back on. Also changeable from that card.");
             _cfgLbName = Config.Bind("Leaderboard", "DisplayName", "",
                 "Name shown on the leaderboard. Leave empty to use your in-game name.");
             _cfgLbLearnedName = Config.Bind("Leaderboard", "InGameName", "",
                 "Your in-game name, learned during a match. Managed automatically.");
-            _cfgLbApi = Config.Bind("Leaderboard", "Server", "",
-                "Base URL of the leaderboard service, e.g. https://ptcglleaderboard-leaderboard.example.workers.dev");
+            // The live service is the default: a player will never paste a URL into a config file,
+            // so an empty default meant a leaderboard that silently never submitted. The worker keeps
+            // its original "prizetracker" name because that is its deployed URL.
+            _cfgLbApi = Config.Bind("Leaderboard", "Server", DefaultServer,
+                "Base URL of the leaderboard service.");
             _cfgLbPlayerId = Config.Bind("Leaderboard", "PlayerId", "",
                 "Random id identifying you on the leaderboard. Generated once. Not your account id.");
+            _cfgMigrated = Config.Bind("Leaderboard", "MigratedFromPrizeTracker", false,
+                "Managed automatically. Set once the identity from the old ptcgl.prizetracker.cfg has been carried over.");
 
+            MigrateLegacyConfig();
+
+        }
+
+        private const string DefaultServer = "https://prizetracker-leaderboard.jakobi832.workers.dev";
+
+        /// <summary>
+        /// Carry the leaderboard identity over from the config file of the plugin's old name.
+        ///
+        /// BepInEx names a config file after the plugin GUID, so renaming ptcgl.prizetracker to
+        /// ptcgl.leaderboard silently started a fresh file - and a fresh file means a fresh random
+        /// PlayerId, which orphans the player's existing leaderboard row and makes them a second
+        /// player. Runs once (guarded by MigratedFromPrizeTracker), before anything can submit, and
+        /// never touches the old file. The old id WINS over one the new file generated, because the
+        /// new one has never been submitted: until now the Server default was empty.
+        /// </summary>
+        private void MigrateLegacyConfig()
+        {
+            if (_cfgMigrated.Value) return;
+            try
+            {
+                var legacy = System.IO.Path.Combine(Paths.ConfigPath, "ptcgl.prizetracker.cfg");
+                if (System.IO.File.Exists(legacy))
+                {
+                    var old = ReadSection(legacy, "Leaderboard");
+                    string v;
+                    if (old.TryGetValue("PlayerId", out v) && v.Length > 0) _cfgLbPlayerId.Value = v;
+                    if (old.TryGetValue("InGameName", out v) && v.Length > 0) _cfgLbLearnedName.Value = v;
+                    if (old.TryGetValue("DisplayName", out v) && v.Length > 0) _cfgLbName.Value = v;
+                    if (old.TryGetValue("Server", out v) && v.Length > 0) _cfgLbApi.Value = v;
+                    Log.LogInfo("config: carried the leaderboard identity over from ptcgl.prizetracker.cfg");
+                }
+            }
+            catch (Exception e) { Log.LogWarning("config migration failed: " + e.Message); return; }
+            _cfgMigrated.Value = true;
+        }
+
+        /// <summary>key = value pairs of one [section] of a BepInEx .cfg - comments and other sections skipped.</summary>
+        private static System.Collections.Generic.Dictionary<string, string> ReadSection(string path, string section)
+        {
+            var d = new System.Collections.Generic.Dictionary<string, string>();
+            bool inside = false;
+            foreach (var raw in System.IO.File.ReadAllLines(path))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line[0] == '#') continue;
+                if (line[0] == '[') { inside = line == "[" + section + "]"; continue; }
+                if (!inside) continue;
+                int eq = line.IndexOf('=');
+                if (eq > 0) d[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
+            }
+            return d;
         }
 
         /// <summary>
