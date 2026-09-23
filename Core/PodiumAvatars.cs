@@ -52,11 +52,11 @@ namespace PrizeTracker.Core
         /// </summary>
         private static bool _loading;
 
-        // The celebrations run in order - first place, a pause, second, a pause, third - rather
-        // than all three at once, which read as a crowd rather than a podium. This is the place
-        // whose turn it is; each place waits for it, and hands it on once its own pose has
-        // finished and the pause has passed. Every early exit hands it on too, so a figure that
-        // never appears cannot leave the ones behind it standing there.
+        // The celebrations start in order - first place, two seconds, second, two seconds,
+        // third - rather than all three at once, which read as a crowd rather than a podium.
+        // This is the place whose turn it is; each place waits for it, and hands it on TurnGap
+        // after its own pose starts (so the poses overlap, like a wave). Every early exit hands
+        // it on too, so a figure that never appears cannot leave the ones behind it standing.
         private static int _turn;
         private const float TurnGap = 2f;
 
@@ -265,16 +265,18 @@ namespace PrizeTracker.Core
             }
             if (target == null) { HandOn(place); yield break; }
 
+            // The next place goes TurnGap after this pose STARTS - a rolling start, with each
+            // celebration overlapping the tail of the one before - not after it finishes.
             float length = Length(anims[0]);
-            if (length > Blend) yield return new WaitForSeconds(length - Blend);
-            if (target == null) { HandOn(place); yield break; }
+            float untilIdle = Mathf.Max(0f, length - Blend);
+            float first = Mathf.Min(TurnGap, untilIdle);
+            if (first > 0f) yield return new WaitForSeconds(first);
+            HandOn(place);
+            if (target == null) yield break;
+            if (untilIdle > first) yield return new WaitForSeconds(untilIdle - first);
+            if (target == null) yield break;
 
             foreach (var a in anims) if (a != null) a.CrossFade("idle", Blend);
-
-            // The pose is over; a beat, then the next place goes. Detached from this figure's
-            // own life so closing the screen mid-pause does not stall anything.
-            yield return new WaitForSeconds(TurnGap);
-            HandOn(place);
 
 
             // Hold the framing. Setting it once is not enough for first place: that is the
