@@ -30,6 +30,56 @@ namespace PrizeTracker.Core
     {
         private const string ScriptEngineGuid = "com.bepis.bepinex.scriptengine";
 
+        private void Awake()
+        {
+            try { Arm(); }
+            catch (Exception e) { Plugin.Log.LogWarning("hot reload: could not arm the watcher: " + e.Message); }
+        }
+
+        /// <summary>
+        /// Start ScriptEngine's file watcher in the session that is already running.
+        ///
+        /// Setting EnableFileSystemWatcher in the config file only takes effect at the NEXT
+        /// launch, because ScriptEngine reads it once in its own Awake - so turning it on means
+        /// restarting the game, which is the restart hot reload exists to avoid. Turning it on
+        /// during a session that started with it off therefore has to call the method directly.
+        ///
+        /// Guarded on ScriptEngine's own fileSystemWatcher field rather than a flag of ours.
+        /// ScriptEngine lives in plugins, not scripts, so it is NOT reloaded when we are - its
+        /// watcher survives while this component is built anew every reload, and a flag of ours
+        /// would reset each time and stack up a watcher per reload, each firing its own.
+        /// </summary>
+        private static void Arm()
+        {
+            BepInEx.PluginInfo info;
+            if (!Chainloader.PluginInfos.TryGetValue(ScriptEngineGuid, out info) || info == null ||
+                info.Instance == null)
+            {
+                Plugin.Log.LogInfo("hot reload: ScriptEngine is not loaded; F6 still reloads by hand.");
+                return;
+            }
+
+            var engine = info.Instance;
+            var type = engine.GetType();
+            const BindingFlags Priv = BindingFlags.Instance | BindingFlags.NonPublic;
+
+            var watcherField = type.GetField("fileSystemWatcher", Priv);
+            if (watcherField != null && watcherField.GetValue(engine) != null) return;   // already watching
+
+            var start = type.GetMethod("StartFileSystemWatcher", Priv) ??
+                        type.GetMethod("StartFileSystemWatcher",
+                                       BindingFlags.Instance | BindingFlags.Public);
+            if (start == null)
+            {
+                Plugin.Log.LogWarning("hot reload: ScriptEngine has no StartFileSystemWatcher; " +
+                                      "reload with F6.");
+                return;
+            }
+
+            start.Invoke(engine, null);
+            Plugin.Log.LogWarning("hot reload: watching the scripts folder - a build now applies by itself.");
+        }
+
         private void Update()
         {
             // Nothing to do. A reload used to be held back while a match was running, on the
