@@ -1,5 +1,9 @@
 # PTCGL Leaderboard & Match History
 
+## [📖 Installation guide →](docs/INSTALL.md)
+
+**[⬇ Download the latest version](https://github.com/Jxkobyte/ptcgl-leaderboard/releases/latest)**
+
 ![Devs not adding basic features to their game. "Fine." "I'll do it myself."](docs/meme.png)
 
 A mod for **Pokémon TCG Live** that adds two things the game should have had from the start:
@@ -12,8 +16,6 @@ A mod for **Pokémon TCG Live** that adds two things the game should have had fr
 It only works in the menus. **It shows nothing and reads nothing during a match** apart from the
 start and the result, so there is no in-match advantage. It appears as native tabs in the game's
 own top bar, with a single on/off switch under **Settings → General**.
-
-**[Installation guide →](docs/INSTALL.md)**
 
 ![Leaderboard](docs/install/7-leaderboard.png)
 
@@ -39,7 +41,8 @@ in `%LOCALAPPDATA%\PtcglLeaderboard`.
 - **The launcher** (`Launcher/`) is what the desktop shortcut starts. A PTCGL update can strip the
   BepInEx injector out of the game folder, and a plugin that isn't loaded can't repair itself, so
   the launcher checks the install against a pristine copy in `%LOCALAPPDATA%`, starts the game, and
-  watches for an update removing it.
+  watches for an update removing it. It also checks GitHub for a newer release at most once a day and, if there
+  is one, offers to open the download page. It never downloads or runs anything itself.
 
 The installer lives in a separate repo, `ptcgl-leaderboard-installer` (Inno Setup, per-user, no
 admin).
@@ -85,3 +88,17 @@ the deployed URL, so don't rename it.
 
 Player data deliberately lives outside the game folder, because a PTCGL update can wipe the game
 folder. Uninstalling removes the mod's own files and keeps your match history.
+
+## Questions, bugs, ideas
+
+Message me on Discord: **jakobi_**
+
+## Licence
+
+MIT - see [LICENSE](LICENSE). The installer bundles BepInEx, Unity Doorstop, HarmonyX, MonoMod and
+Mono.Cecil under their own licences; see the notices in the
+[installer repo](https://github.com/Jxkobyte/ptcgl-leaderboard-installer).
+
+*Unofficial fan-made mod. Not affiliated with, endorsed by, or connected to The Pokémon Company,
+Nintendo, Creatures or GAME FREAK. Pokémon and Pokémon TCG Live are trademarks of their respective
+owners. Use at your own risk.*

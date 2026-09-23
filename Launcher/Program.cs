@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -37,6 +37,9 @@ namespace PtcglLeaderboard.Launcher
             {
                 if (Has(args, "--seed")) return SeedMode(args);
                 if (Has(args, "--repair")) return RepairMode();
+                // Just the update check, forced past the once-a-day limit and without starting the
+                // game - for testing the prompt.
+                if (Has(args, "--check-update")) { UpdateCheck.OfferIfNewer(force: true); return 0; }
                 return LaunchMode(args);
             }
             catch (Exception ex)
@@ -74,6 +77,10 @@ namespace PtcglLeaderboard.Launcher
 
         private static int LaunchMode(string[] args)
         {
+            // Before anything else: if the player chooses to update, the game must stay closed so
+            // the new installer can replace its files.
+            if (UpdateCheck.OfferIfNewer()) return 0;
+
             var gameDir = Repair.ResolveGameDir(Value(args, "--game"));
             if (gameDir == null)
             {
