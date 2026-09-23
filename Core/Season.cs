@@ -58,6 +58,43 @@ namespace PrizeTracker.Core
         }
 
         public int Id;
+
+        /// <summary>
+        /// The season's banner art name, e.g. "me5-5_pikachu_mew_mewtwo_full".
+        ///
+        /// Only the prefix is of much use: it is the EXPANSION the season belongs to, which is how
+        /// a season and a set are tied together. See ExpansionCode.
+        /// </summary>
+        public string BannerAsset = "";
+
+        /// <summary>
+        /// The expansion this season runs alongside - "me5-5" for the 30th Celebration season -
+        /// taken from the banner name's prefix. Empty when the season has no banner.
+        /// </summary>
+        public string ExpansionCode
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(BannerAsset)) return "";
+                int i = BannerAsset.IndexOf('_');
+                return i > 0 ? BannerAsset.Substring(0, i) : "";
+            }
+        }
+
+        /// <summary>
+        /// The client's own plaque art for this season's expansion, as it appears in the Shop -
+        /// "Expansion_ME5-5_EN". Named by convention from the expansion code, which is the same
+        /// convention the Shop's own logos follow.
+        /// </summary>
+        public string PlaqueAsset
+        {
+            get
+            {
+                var code = ExpansionCode;
+                return string.IsNullOrEmpty(code) ? "" : "Expansion_" + code.ToUpperInvariant() + "_EN";
+            }
+        }
+
         public DateTime? EndUtc;
         public DateTime? StartUtc;       // the previous season's end, when that document is cached
         public List<League> Leagues = new List<League>();
@@ -105,6 +142,7 @@ namespace PrizeTracker.Core
 
                 var s = new Season { Id = content.Value<int?>("seasonID") ?? id };
                 s.EndUtc = ParseUtc(content.Value<string>("endDate"));
+                s.BannerAsset = content.Value<string>("bannerAssetName") ?? "";
 
                 var lc = content["leagueConfigContent"] as JObject;
                 var leagues = lc != null ? lc["leagueData"] as JArray : null;

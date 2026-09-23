@@ -57,8 +57,6 @@ namespace PrizeTracker.Core
             new Color(0.925f, 0.933f, 0.945f, 1f),
             new Color(0.941f, 0.882f, 0.827f, 1f),
         };
-        private static readonly Color FlagBg = new Color(0.984f, 0.941f, 0.824f, 1f);
-        private static readonly Color FlagInk = new Color(0.54f, 0.43f, 0.12f, 1f);
 
         // The panel fills what the screen actually has. Measured off a real 1920x1080 client:
         // the panel's own 2260 units drew 1696px, so a unit is 0.75px and the full canvas is
@@ -69,20 +67,41 @@ namespace PrizeTracker.Core
         // client: a unit draws at 0.75px, so the canvas is about 2560x1440 and the client's nav
         // owns the top ~95. Center() is symmetrical, so PanelDrop pushes it clear of the nav
         // rather than the panel being sized down to avoid it.
-        private const float PanelW = 2480f, PanelH = 1310f, PanelDrop = -40f;
+        private const float PanelW = 2480f, PanelH = 1334f, PanelDrop = -52f;
         private const float RowW = 2320f, RowH = 74f, RowGap = 6f;
 
-        // Every column below was placed for a 2100-wide row. Rather than retype them, the
-        // right-hand group moves by exactly the extra width and the middle takes a share, so a
-        // wider row widens the gaps evenly instead of stranding the numbers mid-row.
-        private const float Shift = RowW - 2100f;
+        // The list runs in TWO columns of half-width rows, so a page holds twice as many
+        // players in the same height - which is what paid for the podium taking a row. Dropping
+        // the league name made room: everyone on this board is in Master by definition, so that
+        // column repeated the same words down the whole page.
+        private const float ListGap = 44f;
+        private const float HalfW = (RowW - ListGap) / 2f;          // 1138
+
+        // Column positions inside a half-width row. Written out rather than derived from the old
+        // full-width ones, because halving the row is not a scale - the avatar and the rank do not
+        // get smaller, so the text columns absorb all of the loss.
+        // The flag pills are gone from the row, so their width goes back to the columns. They
+        // were also the one thing here wide enough to overrun a half-width row - "unverified
+        // matches" is 200 units on its own - and an overrun in a two-column list lands in the
+        // NEXT column rather than in the margin.
+        //
+        // The flags themselves are untouched: still raised at write time, still stored, still
+        // served by the board. This is the list not showing them, not the board forgetting them.
+        private const float CRank = 18f, CBadge = 100f, CName = 180f, CNameW = 360f;
+        private const float CElo = 560f, CEloW = 180f;
+        private const float CRec = 760f, CRecW = 190f;
+        private const float CWin = 970f, CWinW = 120f;
 
         // The podium takes the top three out of the list and shows them properly, so the page
         // still holds seven players - three on the podium and four in the list beneath it.
         // The podium starts at the very top. There is no title strip above it any more: the
         // heading moved into the gutter beside the columns, which is dead space the podium was
         // never going to use, and that bought the list its seventh row.
-        private const float PodiumTop = 20f, PodiumH = 480f;
+        // One row's worth of height moved from the list to the podium, which is most of what
+        // makes the figures bigger: they are framed by height, so the band is the only thing that
+        // really sets their size. Six rows now rather than seven - still derived, so the count
+        // follows the arithmetic rather than being typed in.
+        private const float PodiumTop = 20f, PodiumH = 584f;
 
         // The tallest place's picture, and the shape they are all drawn at. Everything else on
         // the podium is measured from these two.
@@ -97,8 +116,8 @@ namespace PrizeTracker.Core
         // behind them is. Fixed by the SHORTEST front face, which is third place's: everything has
         // to fit on that one, and the extra room on the taller blocks reads as height rather than
         // as space to fill.
-        private const float EloUp = 16f, NameUp = 42f, NumeralUp = 74f;
-        private const float LineBox = 34f;
+        private const float EloUp = 26f, NameUp = 54f, NumeralUp = 88f;
+        private const float LineBox = 38f;
         private const float ImgHMax = PodiumH - NameStrip, ImgAspect = 452f / 516f;
         private const int PodiumPlaces = 3;
 
@@ -121,7 +140,16 @@ namespace PrizeTracker.Core
         private const float RowsSpace = PinnedTop - 8f - BodyTop;
         private const int VisibleRows = (int)((RowsSpace + RowGap) / (RowH + RowGap));
 
+        // The plaque is 1024x288 in the client's own art, and the heading drops below whatever
+        // height that comes to - so a differently-shaped plaque next set moves the heading rather
+        // than landing on top of it.
+        private const float PlaqueW = 420f;
+        private const float TitleTop = 28f + PlaqueW * 288f / 1024f + 18f;
+
         private bool _built;
+        private RectTransform _plaque;
+        private Sprite _plaqueArt;
+        private bool _plaqueLogged;
         private Transform _body, _podium;
         private readonly List<GameObject> _podiumArt = new List<GameObject>();
         private RectTransform _pinned;
@@ -129,7 +157,7 @@ namespace PrizeTracker.Core
         private readonly List<GameObject> _rows = new List<GameObject>();
         private BoardState _rendered;
         private float _nextTick;
-        private readonly Pager _pager = new Pager(VisibleRows);
+        private readonly Pager _pager = new Pager(VisibleRows * 2);
         private TextMeshProUGUI _pagePrev, _pageNext, _pageLabel;
 
         private class PendingArt { public string Bundle, Asset; public RawImage Target; }
@@ -198,11 +226,21 @@ namespace PrizeTracker.Core
             // wraps onto two lines to fit there. A full-width title strip across the top cost
             // about 140 units of height for one line of text, and that was the difference
             // between six rows in the list and seven.
+            // The current season's expansion plaque, in the gutter above the heading. The name
+            // comes from the season document's own banner asset - its prefix is the expansion -
+            // so this follows the game from set to set instead of being pinned to one.
+            //
+            // It is only drawn if the client already has that sprite loaded. Nothing here pulls
+            // an asset bundle for decoration, so on a session that has not been near the Shop
+            // there is simply no plaque, and the heading sits where it always did.
+            _plaque = Img("Plaque", panel, null, new Color(1f, 1f, 1f, 0f));
+            NativeHistoryScreen.Place(_plaque, 0, 1, 0, 1, 76, -28, PlaqueW, PlaqueW * 288f / 1024f);
+
             var title = GameArt.Label("Text_Bold", panel, "COMMUNITY\nLEADERBOARD", 42, Ink,
                                       TextAlignmentOptions.TopLeft);
             title.enableWordWrapping = true;
             title.lineSpacing = -14f;
-            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -34, 420, 130);
+            NativeHistoryScreen.Place(title.rectTransform, 0, 1, 0, 1, 76, -TitleTop, 420, 130);
 
             _subtitle = GameArt.Label("Text_Regular", panel, "", 28, InkDim, TextAlignmentOptions.TopRight);
             _subtitle.enableWordWrapping = true;
@@ -217,6 +255,7 @@ namespace PrizeTracker.Core
 
             // The heading was built before the backdrop, and this canvas draws in sibling order,
             // so without this the backdrop covers it.
+            if (_plaque != null) _plaque.SetAsLastSibling();
             title.transform.SetAsLastSibling();
             _subtitle.transform.SetAsLastSibling();
 
@@ -233,12 +272,15 @@ namespace PrizeTracker.Core
             var head = new GameObject("Head", typeof(RectTransform));
             head.transform.SetParent(panel, false);
             NativeHistoryScreen.Place((RectTransform)head.transform, 0.5f, 1, 0.5f, 1, 0, -HeadTop, RowW, HeadH);
-            Col(head.transform, "#", 30, 70, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "PLAYER", 215, 600 + Shift * 0.3f, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "LEAGUE", 820 + Shift * 0.3f, 300, TextAlignmentOptions.MidlineLeft);
-            Col(head.transform, "ELO", 1150 + Shift, 200, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "RECORD", 1390 + Shift, 220, TextAlignmentOptions.MidlineRight);
-            Col(head.transform, "WIN %", 1630 + Shift, 130, TextAlignmentOptions.MidlineRight);
+            for (int c = 0; c < 2; c++)
+            {
+                float x = c * (HalfW + ListGap);
+                Col(head.transform, "#", x + CRank, 70, TextAlignmentOptions.MidlineLeft);
+                Col(head.transform, "PLAYER", x + CName, CNameW, TextAlignmentOptions.MidlineLeft);
+                Col(head.transform, "ELO", x + CElo, CEloW, TextAlignmentOptions.MidlineRight);
+                Col(head.transform, "RECORD", x + CRec, CRecW, TextAlignmentOptions.MidlineRight);
+                Col(head.transform, "WIN %", x + CWin, CWinW, TextAlignmentOptions.MidlineRight);
+            }
 
             var body = new GameObject("Body", typeof(RectTransform));
             body.transform.SetParent(panel, false);
@@ -361,18 +403,25 @@ namespace PrizeTracker.Core
 
             int total = Mathf.Max(0, st.Players.Count - places);
             int start = _pager.Start(total), shown = _pager.Count(total);
-            for (int i = start; i < start + shown; i++)
+            for (int i = 0; i < shown; i++)
             {
-                var p = st.Players[places + i];
+                var p = st.Players[places + start + i];
                 bool me = !string.IsNullOrEmpty(myId) && p.PlayerId == myId;
                 meShown |= me;
-                Row(_body, p, y, me, i % 2 == 0 ? RowA : RowB);
-                y += RowH + RowGap;
+
+                // Column-major: the left column runs 4..9 and the right 10..15, so reading down a
+                // column follows the ranking. Filling left-to-right instead would put consecutive
+                // ranks side by side and make the eye zigzag.
+                int col = i / VisibleRows, slot = i % VisibleRows;
+                Row(_body, p, col * (HalfW + ListGap), slot * (RowH + RowGap), me,
+                    slot % 2 == 0 ? RowA : RowB);
             }
+            y = 0f;
 
             SetPageButton(_pagePrev, _pager.CanPrev(total));
             SetPageButton(_pageNext, _pager.CanNext(total));
             if (_pageLabel != null) _pageLabel.text = _pager.Label(total);
+            ShowPlaque();
 
             // Your own row, pinned below the list when you are not in the visible part of it.
             if (!meShown && st.Me != null)
@@ -381,7 +430,9 @@ namespace PrizeTracker.Core
                 host.transform.SetParent(_body.parent, false);
                 _pinned = (RectTransform)host.transform;
                 NativeHistoryScreen.Place(_pinned, 0.5f, 1, 0.5f, 1, 0, -PinnedTop, RowW, RowH);
-                Row(_pinned, st.Me, 0f, true, RowA);
+                // Centred under the two columns rather than in one of them: it is not part of the
+                // ranking's reading order, it is where you are.
+                Row(_pinned, st.Me, (RowW - HalfW) * 0.5f, 0f, true, RowA);
             }
 
             UpdateStatus();
@@ -414,7 +465,7 @@ namespace PrizeTracker.Core
             // a 313-wide block there was a thin strip of panel showing between them, which read
             // as three separate plinths rather than one podium. The blocks are a shade wider than
             // the step so they overlap rather than leaving a seam at the join.
-            const float ColStep = 333f, ColW = 296f;
+            const float ColStep = 372f, ColW = 345f;
             float[] xs = { 0f, -ColStep, ColStep };
 
             // Block heights in WORLD units, not pixels: the block is a real cube in front of the
@@ -424,11 +475,12 @@ namespace PrizeTracker.Core
             // Shorter than they were. The camera has to frame block plus figure plus enough
             // room above for raised arms, so every unit of block is a unit the figure does not
             // get - and the figure is the thing worth looking at.
-            // Only just tall enough to letter on. Every unit of block is a unit the figure
-            // does not get, since the camera frames both, so these are cut to what the three
-            // lines on the front actually need - measured against THIRD place, whose front face
-            // is the shortest and therefore sets the floor for all of them.
-            float[] blocks = { 0.85f, 0.77f, 0.70f };
+            // All three the same height and the same shape. Stepping them made first place
+            // biggest, but it also meant three different front faces to letter on, sized by the
+            // shortest - so second and third carried more block than their text needed while the
+            // figures paid for it. Level blocks give every figure the same, larger frame.
+            const float BlockH = 0.65f;
+            float[] blocks = { BlockH, BlockH, BlockH };
 
             float x = xs[place], blockH = blocks[place];
             Color medal = Medal[place], dim = MedalDim[place];
@@ -473,7 +525,7 @@ namespace PrizeTracker.Core
                 // block seen from above shows that face across its upper third, so "centred on
                 // the block" is not on the face you are reading.
                 var num = GameArt.Label("Text_Bold", t, (p.Rank > 0 ? p.Rank : place + 1).ToString(),
-                                        32, Color.white, TextAlignmentOptions.Center);
+                                        36, Color.white, TextAlignmentOptions.Center);
                 // Place() positions by the PIVOT, and a bottom pivot means y is the box's bottom
                 // edge - so a 40-tall box placed at 16 put the glyph's centre at 36, which on
                 // third place's short front face was right at its top edge. Half the box height
@@ -525,11 +577,11 @@ namespace PrizeTracker.Core
             // White on the block, not grey under it: these are lettered onto the podium now, so
             // they take the block's own ink rather than the panel's.
             var elo = GameArt.Label("Text_Medium", t, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
-                                    22, new Color(1f, 1f, 1f, 0.85f), TextAlignmentOptions.Center);
+                                    24, new Color(1f, 1f, 1f, 0.85f), TextAlignmentOptions.Center);
             NativeHistoryScreen.Place(elo.rectTransform, 0.5f, 0, 0.5f, 0, 0,
                                       EloUp - LineBox * 0.5f, ColW, LineBox);
 
-            var name = GameArt.Label("Text_Medium", t, "", 26, Color.white,
+            var name = GameArt.Label("Text_Medium", t, "", 30, Color.white,
                                      TextAlignmentOptions.Center);
             name.richText = true;
             name.text = Esc(p.DisplayName) +
@@ -538,65 +590,77 @@ namespace PrizeTracker.Core
                                       NameUp - LineBox * 0.5f, ColW, LineBox);
         }
 
-        private void Row(Transform parent, BoardRow p, float y, bool me, Color bg)
+        private void Row(Transform parent, BoardRow p, float x, float y, bool me, Color bg)
         {
             var row = Img("Row", parent, GameArt.Sprite("btn_Oct_16"), me ? MeTint : bg);
-            NativeHistoryScreen.Place(row, 0, 1, 0, 1, 0, -y, RowW, RowH);
+            NativeHistoryScreen.Place(row, 0, 1, 0, 1, x, -y, HalfW, RowH);
             _rows.Add(row.gameObject);
 
-            if (me)
-            {
-                var bar = Img("Accent", row, null, Accent);
-                NativeHistoryScreen.Place(bar, 0, 0.5f, 0, 0.5f, 10, 0, 9, RowH - 18);
-            }
+            // No accent bar down the edge of your own row: the row's blue tint and the YOU tag
+            // already say which one is yours, and the bar sat right in front of the name.
 
             // Rank 0 means unranked - below Master - so show a dash rather than a position that
             // does not exist. "0" read as a real standing, and a very bad one.
             var rank = GameArt.Label("Text_Medium", row, p.Rank > 0 ? p.Rank.ToString() : "–",
-                                     32, me ? Accent : InkDim, TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(rank.rectTransform, 0, 0.5f, 0, 0.5f, 30, 0, 80, 44);
+                                     28, me ? Accent : InkDim, TextAlignmentOptions.MidlineLeft);
+            NativeHistoryScreen.Place(rank.rectTransform, 0, 0.5f, 0, 0.5f, CRank, 0, 70, 44);
 
-            Badge(row, p.Exp, 120);
+            Badge(row, p.Exp, CBadge);
 
-            var name = GameArt.Label("Text_Medium", row, "", 34, Ink, TextAlignmentOptions.MidlineLeft);
+            var name = GameArt.Label("Text_Medium", row, "", 30, Ink, TextAlignmentOptions.MidlineLeft);
             name.richText = true;
             name.text = Esc(p.DisplayName) +
-                        (me ? "  <size=22><color=#" + ColorUtility.ToHtmlStringRGB(Accent) + ">YOU</color></size>" : "");
-            NativeHistoryScreen.Place(name.rectTransform, 0, 0.5f, 0, 0.5f, 215, 0, 600 + Shift * 0.3f, 44);
-
-            var league = GameArt.Label("Text_Regular", row, LeagueTitle(p.Exp), 28, InkDim,
-                                       TextAlignmentOptions.MidlineLeft);
-            NativeHistoryScreen.Place(league.rectTransform, 0, 0.5f, 0, 0.5f, 820 + Shift * 0.3f, 0, 300, 44);
+                        (me ? "  <size=20><color=#" + ColorUtility.ToHtmlStringRGB(Accent) + ">YOU</color></size>" : "");
+            NativeHistoryScreen.Place(name.rectTransform, 0, 0.5f, 0, 0.5f, CName, 0, CNameW, 44);
 
             // ELO alone. Everyone on this board is in Master, where exp has stopped separating
             // players - one rank spans 550 to 15000 - so it is the only number left that ranks.
             var rating = GameArt.Label("Text_Medium", row, p.Elo > 0 ? p.Elo.ToString("N0") : "-",
-                                       32, Ink, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, 1150 + Shift, 0, 200, 44);
+                                       28, Ink, TextAlignmentOptions.MidlineRight);
+            NativeHistoryScreen.Place(rating.rectTransform, 0, 0.5f, 0, 0.5f, CElo, 0, CEloW, 44);
 
             // "120-60": 120 wins, 60 losses - the matches played, as a record.
-            var rec = GameArt.Label("Text_Medium", row, p.Record, 32, Ink, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, 1390 + Shift, 0, 220, 44);
+            var rec = GameArt.Label("Text_Medium", row, p.Record, 28, Ink, TextAlignmentOptions.MidlineRight);
+            NativeHistoryScreen.Place(rec.rectTransform, 0, 0.5f, 0, 0.5f, CRec, 0, CRecW, 44);
 
             int played = p.Wins + p.Losses;
             string pct = played > 0 ? Mathf.RoundToInt(100f * p.Wins / played) + "%" : "-";
-            var wr = GameArt.Label("Text_Regular", row, pct, 30, InkDim, TextAlignmentOptions.MidlineRight);
-            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, 1630 + Shift, 0, 130, 44);
+            var wr = GameArt.Label("Text_Regular", row, pct, 26, InkDim, TextAlignmentOptions.MidlineRight);
+            NativeHistoryScreen.Place(wr.rectTransform, 0, 0.5f, 0, 0.5f, CWin, 0, CWinW, 44);
 
-            // Flags are the board's honesty: they are shown, never hidden, and never block.
-            float fx = 1790f + Shift;
-            foreach (var f in p.Flags)
-            {
-                var label = FlagText(f);
-                if (label == null) continue;
-                var pill = Img("Flag", row, GameArt.Sprite("btn_Oct_16"), FlagBg);
-                float w = 34f + label.Length * 12f;
-                NativeHistoryScreen.Place(pill, 0, 0.5f, 0, 0.5f, fx, 0, w, 38);
-                var t = GameArt.Label("Text_Regular", pill, label, 22, FlagInk, TextAlignmentOptions.Center);
-                NativeHistoryScreen.Stretch(t.rectTransform);
-                fx += w + 8f;
-                if (fx > RowW - 60f) break;
-            }
+        }
+
+
+        private static string Esc(string s)
+        {
+            return (s ?? "").Replace("<", "‹").Replace(">", "›");
+        }
+
+        // -----------------------------------------------------------------------------------
+
+        private static RectTransform Img(string name, Transform parent, Sprite sprite, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.sprite = sprite;
+            img.color = color;
+            img.raycastTarget = false;
+            if (sprite != null) img.type = Image.Type.Sliced;
+            return (RectTransform)go.transform;
+        }
+
+        private static void Center(RectTransform rt, float w, float h, float x, float y)
+        {
+            NativeHistoryScreen.Place(rt, 0.5f, 0.5f, 0.5f, 0.5f, x, y, w, h);
+        }
+
+        private static string Ago(TimeSpan t)
+        {
+            if (t.TotalSeconds < 90) return "just now";
+            if (t.TotalMinutes < 90) return Mathf.RoundToInt((float)t.TotalMinutes) + " min ago";
+            if (t.TotalHours < 36) return Mathf.RoundToInt((float)t.TotalHours) + " h ago";
+            return Mathf.RoundToInt((float)t.TotalDays) + " d ago";
         }
 
         /// <summary>The league frame with the rank icon over it, both from the client's own bundle.</summary>
@@ -613,20 +677,6 @@ namespace PrizeTracker.Core
             Layer(holder.transform, "Icon", rank.Image);
         }
 
-        private void Layer(Transform holder, string name, string asset)
-        {
-            if (string.IsNullOrEmpty(asset)) return;
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(holder, false);
-            var raw = go.AddComponent<RawImage>();
-            raw.raycastTarget = false;
-            raw.color = new Color(1, 1, 1, 0);          // invisible until the art lands
-            NativeHistoryScreen.Stretch((RectTransform)go.transform);
-
-            var tex = ItemArt.Instance != null ? ItemArt.Instance.Get("leagueicons", asset) : null;
-            if (tex != null) { raw.texture = tex; raw.color = Color.white; }
-            else _pending.Add(new PendingArt { Bundle = "leagueicons", Asset = asset, Target = raw });
-        }
 
         private void FillArt()
         {
@@ -643,11 +693,49 @@ namespace PrizeTracker.Core
             }
         }
 
-        private string LeagueTitle(int exp)
+
+        private void Layer(Transform holder, string name, string asset)
         {
-            Season.League league; Season.Rank rank; int idx;
-            if (Season == null || !Season.RankFor((uint)Math.Max(0, exp), out league, out rank, out idx)) return "";
-            return league.Title + " " + (idx + 1);
+            if (string.IsNullOrEmpty(asset)) return;
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(holder, false);
+            var raw = go.AddComponent<RawImage>();
+            raw.raycastTarget = false;
+            raw.color = new Color(1, 1, 1, 0);          // invisible until the art lands
+            NativeHistoryScreen.Stretch((RectTransform)go.transform);
+
+            var tex = ItemArt.Instance != null ? ItemArt.Instance.Get("leagueicons", asset) : null;
+            if (tex != null) { raw.texture = tex; raw.color = Color.white; }
+            else _pending.Add(new PendingArt { Bundle = "leagueicons", Asset = asset, Target = raw });
+        }
+
+
+        /// <summary>Show the season's plaque, if the client happens to have that art loaded.</summary>
+        private void ShowPlaque()
+        {
+            if (_plaque == null) return;
+            var img = _plaque.GetComponent<Image>();
+            if (img == null) return;
+            var name = Season != null ? Season.PlaqueAsset : "";
+            // Looked up fresh, NOT through GameArt.Sprite: that builds its index once and keeps
+            // it, so a sprite the client loads later - and the expansion art only loads when
+            // something has shown it - stays invisible to it forever.
+            var sprite = _plaqueArt;
+            if (sprite == null && !string.IsNullOrEmpty(name))
+            {
+                foreach (var sp in Resources.FindObjectsOfTypeAll<Sprite>())
+                    if (sp != null && sp.name == name) { sprite = _plaqueArt = sp; break; }
+            }
+            img.sprite = sprite;
+            if (!_plaqueLogged)
+            {
+                _plaqueLogged = true;
+                Plugin.Log.LogWarning("plaque: banner=" +
+                                      (Season != null ? Season.BannerAsset : "(no season)") +
+                                      " asset=" + name + " found=" + (sprite != null));
+            }
+            img.type = Image.Type.Simple;
+            img.color = sprite == null ? new Color(1f, 1f, 1f, 0f) : Color.white;
         }
 
         private void UpdateStatus()
@@ -690,49 +778,13 @@ namespace PrizeTracker.Core
                                 (string.IsNullOrEmpty(Board.LastSubmit) ? "" : "   ·   last submit: " + Board.LastSubmit);
         }
 
-        private static string Ago(TimeSpan t)
+
+        private string LeagueTitle(int exp)
         {
-            if (t.TotalSeconds < 90) return "just now";
-            if (t.TotalMinutes < 90) return Mathf.RoundToInt((float)t.TotalMinutes) + " min ago";
-            if (t.TotalHours < 36) return Mathf.RoundToInt((float)t.TotalHours) + " h ago";
-            return Mathf.RoundToInt((float)t.TotalDays) + " d ago";
+            Season.League league; Season.Rank rank; int idx;
+            if (Season == null || !Season.RankFor((uint)Math.Max(0, exp), out league, out rank, out idx)) return "";
+            return league.Title + " " + (idx + 1);
         }
 
-        private static string FlagText(string f)
-        {
-            switch (f)
-            {
-                case "new": return "new";
-                case "nonmonotonic": return "counters reset";
-                case "impossible-rate": return "too fast";
-                case "inconsistent": return "record mismatch";
-                case "local-mismatch": return "unverified matches";
-                default: return null;
-            }
-        }
-
-        private static string Esc(string s)
-        {
-            return (s ?? "").Replace("<", "‹").Replace(">", "›");
-        }
-
-        // -----------------------------------------------------------------------------------
-
-        private static RectTransform Img(string name, Transform parent, Sprite sprite, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            var img = go.AddComponent<Image>();
-            img.sprite = sprite;
-            img.color = color;
-            img.raycastTarget = false;
-            if (sprite != null) img.type = Image.Type.Sliced;
-            return (RectTransform)go.transform;
-        }
-
-        private static void Center(RectTransform rt, float w, float h, float x, float y)
-        {
-            NativeHistoryScreen.Place(rt, 0.5f, 0.5f, 0.5f, 0.5f, x, y, w, h);
-        }
     }
 }

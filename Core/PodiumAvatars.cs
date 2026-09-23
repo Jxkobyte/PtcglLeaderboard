@@ -259,9 +259,17 @@ namespace PrizeTracker.Core
                 var held = Take(place, cam);
                 held.Ctrl = ctrl;
 
-                var rend = ctrl.GetComponentInChildren<Renderer>(true);
-                if (rend == null) return false;
-                var b = rend.bounds;
+                // EVERY renderer, combined - not the first one found. A figure is a body plus
+                // hair, clothes, shoes and glasses, and GetComponentInChildren returns whichever
+                // of those the hierarchy happens to put first. Framing from one part measured a
+                // different figure on each podium, so the three blocks came out at three
+                // different sizes even though all three are the same cube.
+                var rends = ctrl.GetComponentsInChildren<Renderer>(true);
+                if (rends.Length == 0) return false;
+                var b = rends[0].bounds;
+                for (int i = 1; i < rends.Length; i++)
+                    if (rends[i] != null) b.Encapsulate(rends[i].bounds);
+                var rend = rends[0];
                 float feet = b.center.y - b.extents.y;
                 float head = b.center.y + b.extents.y;
 
@@ -339,7 +347,12 @@ namespace PrizeTracker.Core
             // the more of its TOP face is in view - and the top face eats the front face, which
             // is the one carrying the position numeral. At depth 1.2 third place had more top
             // than front and its numeral had nowhere to sit.
-            cube.transform.localScale = new Vector3(2.5f, h, 0.7f);
+            // 1.9 rather than 2.2, which was clipping. The FRONT face is nearer the camera than
+            // the block's centre and so is magnified by perspective - about 5% here - while the
+            // frame it has to fit inside is correspondingly narrower at that depth. At 2.2 that
+            // left roughly 13 units of margin and the top-front corner was being cut off at the
+            // edge of the render texture.
+            cube.transform.localScale = new Vector3(1.9f, h, 0.7f);
 
             var mr = cube.GetComponent<MeshRenderer>();
             if (mr != null)
@@ -356,6 +369,9 @@ namespace PrizeTracker.Core
                     mr.sharedMaterial = mat;
                 }
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                // The figure was dropping a shadow onto the block's top face, which came out as a
+                // pale ring under its feet rather than anything shadow-shaped.
+                mr.receiveShadows = false;
             }
             return cube;
         }
