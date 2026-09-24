@@ -20,9 +20,32 @@ namespace PtcglLeaderboard.Core
     /// </summary>
     internal static class DataPaths
     {
-        public static string Root => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PtcglLeaderboard");
+        public static string Root => _root ?? (_root = FindRoot());
+        private static string _root;
+
+        /// <summary>
+        /// %LOCALAPPDATA%\PtcglLeaderboard on Windows. On a Mac,
+        /// ~/Library/Application Support/PtcglLeaderboard - the folder the Mac installer puts
+        /// BepInEx in, and the one its uninstaller knows to leave alone. Mono maps
+        /// LocalApplicationData to ~/.local/share on a Mac, a hidden folder nobody would find.
+        ///
+        /// Mono reports a Mac as PlatformID.Unix; there is no Linux build of the game, so Unix
+        /// means a Mac here. No Unity call, so this is safe from any thread.
+        /// </summary>
+        private static string FindRoot()
+        {
+            var platform = Environment.OSVersion.Platform;
+            if (platform == PlatformID.Unix || platform == PlatformID.MacOSX)
+            {
+                var home = Environment.GetEnvironmentVariable("HOME");
+                if (string.IsNullOrEmpty(home)) home = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+                if (!string.IsNullOrEmpty(home))
+                    return Path.Combine(Path.Combine(Path.Combine(home, "Library"), "Application Support"), "PtcglLeaderboard");
+            }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PtcglLeaderboard");
+        }
 
         public static string MatchLog => Path.Combine(Root, "matches.jsonl");
         public static string Avatars => Path.Combine(Root, "avatars");

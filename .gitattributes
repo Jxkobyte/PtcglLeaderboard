@@ -1,0 +1,6 @@
+# The macOS scripts run under bash and osascript on a Mac, where a CRLF line ending is a syntax
+# error ("$'\r': command not found"). Keep them LF whatever the checkout's autocrlf setting.
+*.sh            text eol=lf
+*.command       text eol=lf
+*.applescript   text eol=lf
+Mac/scripts/*.js text eol=lf

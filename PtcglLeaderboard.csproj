@@ -56,6 +56,9 @@
          broken at HEAD after it was removed. Launcher\ is a separate exe, built on its own. -->
     <Compile Remove="Launcher\**" />
     <None Remove="Launcher\**" />
+    <!-- Mac\ holds the macOS loader and installer scripts, built and packaged on their own. -->
+    <Compile Remove="Mac\**" />
+    <None Remove="Mac\**" />
   </ItemGroup>
 
   <ItemGroup>

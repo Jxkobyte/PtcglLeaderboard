@@ -4,7 +4,8 @@
 
 ![Devs not adding basic features to their game. "Fine." "I'll do it myself."](docs/meme.png)
 
-A mod for **Pokémon TCG Live** that adds two things the game should have had from the start:
+A mod for **Pokémon TCG Live**, on Windows and Mac, that adds two things the game should have had
+from the start:
 
 - **Match History**: every game you play, with the result, prizes, turns, time taken, your
   opponent's deck and the battle log.
@@ -23,7 +24,7 @@ Only your own season record goes to the leaderboard: your in-game name, rank poi
 exp), wins and losses, and the item ids of the outfit your avatar wears, so other players' games can
 draw you on the podium. You are identified by a random ID the mod creates, not your Pokémon Trainer
 Club account. Nothing about your opponents is ever sent. Your match history stays on your computer,
-in `%LOCALAPPDATA%\PtcglLeaderboard`.
+in `%LOCALAPPDATA%\PtcglLeaderboard` (on a Mac, `~/Library/Application Support/PtcglLeaderboard`).
 
 ## Will I get banned for using this?
 
@@ -59,8 +60,12 @@ game back exactly as it was.
   watches for an update removing it. It also checks GitHub for a newer release at most once a day and, if there
   is one, offers to open the download page. It never downloads or runs anything itself.
 
-The installer lives in a separate repo, `ptcgl-leaderboard-installer` (Inno Setup, per-user, no
-admin).
+- **macOS** (`Mac/`) uses the same plugin DLL. Doorstop can't inject into a notarized Mac app, so
+  the game is asked to load a small loader itself, through its own Unity start-up manifests, and
+  the loader starts BepInEx. See [Mac/README.md](Mac/README.md).
+
+The installers live in a separate repo, `ptcgl-leaderboard-installer`: Inno Setup for Windows
+(per-user, no admin) and `build-mac.py` for the Mac zip.
 
 ## Building
 

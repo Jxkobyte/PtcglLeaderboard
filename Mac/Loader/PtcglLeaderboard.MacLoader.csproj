@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PtcglLeaderboard.MacLoader - starts BepInEx inside the macOS game.
+
+    Windows loads BepInEx through Doorstop (winhttp.dll). The Mac equivalent, DYLD_INSERT_LIBRARIES,
+    is ignored for a notarized, hardened app, so on a Mac the game is asked to load this assembly
+    itself: the installer lists it in the game's own ScriptingAssemblies.json and
+    RuntimeInitializeOnLoads.json, the two files a Unity player reads at startup to know which
+    managed assemblies to load and which static methods to call before the first scene. No game
+    code is modified.
+
+    It references nothing of BepInEx at compile time: BepInEx lives outside the game, is found
+    through an environment variable the launcher sets, and is started by reflection. Without that
+    variable - the game opened from the Dock rather than through the launcher - this does nothing
+    at all. See Entrypoint.cs.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>PtcglLeaderboard.MacLoader</AssemblyName>
+    <RootNamespace>PtcglLeaderboard.MacLoader</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+    <Version>1.0.5</Version>
+    <AssemblyVersion>1.0.5.0</AssemblyVersion>
+    <FileVersion>1.0.5.0</FileVersion>
+    <Company>Inevitable2002</Company>
+    <Product>PTCGL Leaderboard &amp; Match History</Product>
+    <Description>Starts BepInEx for PTCGL Leaderboard &amp; Match History on macOS</Description>
+    <Copyright>Copyright (c) 2026 Inevitable2002</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameRoot Condition="'$(GameRoot)' == ''">$(USERPROFILE)\The Pokémon Company International\Pokémon Trading Card Game Live</GameRoot>
+    <GameManaged Condition="'$(GameManaged)' == ''">$(GameRoot)\Pokemon TCG Live_Data\Managed</GameManaged>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only for the RuntimeInitializeOnLoadMethod attribute. Never copied: the game has its own. -->
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>

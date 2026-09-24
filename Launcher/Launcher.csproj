@@ -34,9 +34,9 @@
     repo, which is the source of truth. The game's own icon is deliberately NOT used.
   -->
   <PropertyGroup>
-    <Version>1.0.4</Version>
-    <AssemblyVersion>1.0.4.0</AssemblyVersion>
-    <FileVersion>1.0.4.0</FileVersion>
+    <Version>1.0.5</Version>
+    <AssemblyVersion>1.0.5.0</AssemblyVersion>
+    <FileVersion>1.0.5.0</FileVersion>
     <Company>Inevitable2002</Company>
     <Product>PTCGL Leaderboard &amp; Match History</Product>
     <AssemblyTitle>PTCGL Leaderboard &amp; Match History Launcher</AssemblyTitle>
