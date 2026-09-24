@@ -199,6 +199,9 @@ namespace PtcglLeaderboard.Core
         public override void OnDeactivate(HUBGroupController nextGroup)
         {
             _open = false;
+            // Closing hands the podium's cameras and rigs back, so its images have nothing left
+            // behind them: the next open must build a fresh podium, not keep this one.
+            _podiumKey = null;
             try { PodiumAvatars.Release(this); }
             catch (Exception e) { Plugin.Log.LogWarning("leaderboard: " + e.Message); }
             base.OnDeactivate(nextGroup);
@@ -380,17 +383,46 @@ namespace PtcglLeaderboard.Core
 
         // -----------------------------------------------------------------------------------
 
+        private string _podiumKey;
+
+        /// <summary>Everything the podium shows, so an unchanged top three can be left alone.</summary>
+        private string PodiumKey(BoardState st)
+        {
+            if (st == null || st.Players.Count == 0) return null;
+            var sb = new System.Text.StringBuilder(Board != null ? Board.PlayerId : "");
+            for (int i = 0; i < Mathf.Min(PodiumPlaces, st.Players.Count); i++)
+            {
+                var p = st.Players[i];
+                sb.Append('|').Append(p.PlayerId).Append('/').Append(p.DisplayName).Append('/')
+                  .Append(p.Elo).Append('/').Append(p.Outfit);
+            }
+            return sb.ToString();
+        }
+
         private void Populate()
         {
             Build();
             foreach (var r in _rows) if (r != null) UnityEngine.Object.Destroy(r);
             _rows.Clear();
-            foreach (var a in _podiumArt) if (a != null) UnityEngine.Object.Destroy(a);
-            _podiumArt.Clear();
-            _pending.Clear();
+            // Not cleared: FillArt already drops entries whose image has been destroyed, and a
+            // podium that is kept (below) still has icons waiting in here.
 
             var st = Board != null ? Board.State : null;
             _rendered = st;
+
+            // The podium is only rebuilt when the top three actually change. Fresh board data
+            // usually arrives a moment after the screen opens, and rebuilding then reloaded all
+            // three figures - the client hides a figure while it loads, and each one restarted
+            // its celebration - which read as the avatars flashing.
+            string podiumKey = PodiumKey(st);
+            bool keepPodium = podiumKey != null && podiumKey == _podiumKey && _podiumArt.Count > 0
+                              && _podiumArt.TrueForAll(a => a != null);
+            if (!keepPodium)
+            {
+                foreach (var a in _podiumArt) if (a != null) UnityEngine.Object.Destroy(a);
+                _podiumArt.Clear();
+                _podiumKey = null;
+            }
 
             if (st == null || st.Players.Count == 0)
             {
@@ -418,8 +450,9 @@ namespace PtcglLeaderboard.Core
                 var p = st.Players[i];
                 bool me = !string.IsNullOrEmpty(myId) && p.PlayerId == myId;
                 meShown |= me;
-                Plinth(p, i, me);
+                if (!keepPodium) Plinth(p, i, me);
             }
+            if (!keepPodium) _podiumKey = podiumKey;
 
             // First place last, so it draws in FRONT of the two beside it. The blocks overlap
             // slightly to close the seam between them, and this canvas draws in sibling order -

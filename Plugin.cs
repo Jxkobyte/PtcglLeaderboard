@@ -24,7 +24,7 @@ namespace PtcglLeaderboard
     {
         private const string ID = "ptcgl.leaderboard";
         private const string NAME = "PTCGL Leaderboard & Match History";
-        private const string VERSION = "1.0.3";
+        private const string VERSION = "1.0.4";
 
         internal static ManualLogSource Log;
         private readonly Harmony _harmony = new Harmony(ID);
