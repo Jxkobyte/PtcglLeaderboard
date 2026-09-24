@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -15,7 +15,7 @@ namespace PtcglLeaderboard.Launcher
     /// the one piece of ours guaranteed to run outside the game - the right place to ask.
     ///
     /// Deliberately modest:
-    ///   - At most once a day, and never more than a few seconds: offline, slow or rate-limited all
+    ///   - At most once a day, and never more than a few seconds (8 at most): offline, slow or rate-limited all
     ///     just mean "no news", and the game starts as normal.
     ///   - It only ever OPENS the fixed download page. It never downloads or runs anything itself:
     ///     an unsigned program that fetches and executes a binary is precisely what antivirus
@@ -30,7 +30,11 @@ namespace PtcglLeaderboard.Launcher
         public const string DownloadPage = "https://github.com/" + Repo + "/releases/latest";
 
         private static readonly TimeSpan CheckEvery = TimeSpan.FromHours(20);
-        private const int TimeoutMs = 3000;
+        // 8s, not 3: a cold first HTTPS request (connection set-up, proxy detection) usually takes
+        // well under a second but was seen to exceed 3s once, and a timeout means the player never
+        // hears about the update. Offline fails immediately either way; a failed check is not
+        // stamped, so the next launch tries again.
+        private const int TimeoutMs = 8000;
 
         private static string StampFile => Path.Combine(Repair.CacheRoot, "update-check.txt");
 
