@@ -99,13 +99,29 @@ namespace PtcglLeaderboard.Core
         public DateTime? StartUtc;       // the previous season's end, when that document is cached
         public List<League> Leagues = new List<League>();
 
-        /// <summary>Where the client caches its config documents.</summary>
+        /// <summary>
+        /// Where the client caches its config documents.
+        ///
+        /// Asked of Unity rather than built from a Windows path, so the same plugin works on macOS:
+        /// persistentDataPath is %USERPROFILE%\AppData\LocalLow\pokemon\Pokemon TCG Live on
+        /// Windows (exactly the folder this used to hard-code) and the matching folder under
+        /// ~/Library on a Mac. The old Windows path stays as the last resort. Without this a Mac
+        /// found no season at all - no plaque, no countdown - and submitted to last season's
+        /// board, because the client's own season counter runs one behind.
+        /// </summary>
         public static string DefaultCacheDir()
         {
+            var candidates = new List<string>();
+            try { candidates.Add(Path.Combine(UnityEngine.Application.persistentDataPath, "config-cache")); } catch { }
+            try { candidates.Add(Path.Combine(UnityEngine.Application.temporaryCachePath, "config-cache")); } catch { }
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             // LocalLow is a sibling of Local with no SpecialFolder of its own.
             var low = Path.Combine(Path.GetDirectoryName(local) ?? local, "LocalLow");
-            return Path.Combine(low, "pokemon", "Pokemon TCG Live", "config-cache");
+            candidates.Add(Path.Combine(low, "pokemon", "Pokemon TCG Live", "config-cache"));
+
+            foreach (var c in candidates)
+                if (!string.IsNullOrEmpty(c) && File.Exists(Path.Combine(c, "season_current_0.0.json"))) return c;
+            return candidates[candidates.Count - 1];
         }
 
         /// <summary>Load the current season, or null if the cache has none.</summary>
