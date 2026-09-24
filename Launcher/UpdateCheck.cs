@@ -59,7 +59,9 @@ namespace PtcglLeaderboard.Launcher
             {
                 if (!force && !Due()) return false;
                 var latest = Latest();
-                Stamp();
+                // A forced check (--check-update, for testing) must not count as today's check, or
+                // it silently suppresses the real one on the next launch.
+                if (!force) Stamp();
                 if (latest == null || latest <= Current) return false;
 
                 Repair.Log("update available: " + latest + " (have " + Current + ")");

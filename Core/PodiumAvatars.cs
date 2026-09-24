@@ -69,8 +69,15 @@ namespace PtcglLeaderboard.Core
         private static int _turn;
         private const float TurnGap = 2f;
 
-        private static void HandOn(int place)
+        // One token per place per render. The screen re-renders the podium when fresh board data
+        // arrives - often straight after it opens - and the discarded render's figures used to
+        // hand their turns on as they exited, running the counter up to 3 before the real render's
+        // figures had loaded, so all three posed at once. Only the current render may hand on.
+        private static readonly int[] _token = new int[Places];
+
+        private static void HandOn(int place, int token)
         {
+            if (token != _token[place]) return;
             if (_turn == place) _turn = place + 1;
         }
 
@@ -256,15 +263,17 @@ namespace PtcglLeaderboard.Core
                                 float blockH, Color blockColour)
         {
             if (place < 0 || place >= Places) return;
-            if (host == null || target == null || outfit == null) { HandOn(place); return; }
+            int token = ++_token[place];
+            if (place == 0) _turn = 0;          // a new render starts the sequence again from first
+            if (host == null || target == null || outfit == null) { HandOn(place, token); return; }
             var ctrl = Controller(place);
-            if (ctrl == null) { HandOn(place); return; }
-            host.StartCoroutine(Dress(ctrl, place, target, outfit, male, blockH, blockColour));
+            if (ctrl == null) { HandOn(place, token); return; }
+            host.StartCoroutine(Dress(ctrl, place, target, outfit, male, blockH, blockColour, token));
         }
 
         private static IEnumerator Dress(AvatarBaseController ctrl, int place, RawImage target,
                                          Dictionary<AvatarCustomizationType, string> outfit,
-                                         bool male, float blockH, Color blockColour)
+                                         bool male, float blockH, Color blockColour, int token)
         {
             // Which BODY to build is a global on the manager, not part of the outfit, so it has
             // to be set before the load - and only one figure can be loading at a time or the
@@ -272,7 +281,23 @@ namespace PtcglLeaderboard.Core
             // set to female produced no figure at all: no model, and no block either, because
             // staging never ran.
             int gen = _generation;
-            while (_loading) { yield return null; if (gen != _generation) { HandOn(place); yield break; } }
+
+            // The block goes up NOW, before this figure's turn to load. The loads run one at a
+            // time, so third place used to wait for both others with nothing on screen - and the
+            // names, drawn in white on the block fronts, were unreadable on the pale panel until
+            // its block appeared. Staged on the empty rig first, re-staged on the figure once it
+            // has loaded (below).
+            if (target != null && Stage(ctrl, place, target, male, blockH, blockColour))
+            {
+                // Held there while the figure loads: the rig's own load resets its camera view,
+                // which swung the camera off the block - second and third place's blocks (and so
+                // their names) vanished for a second or two until their figure was re-framed.
+                // Runs on our own rig, so it dies with it, and stops once this hold is replaced.
+                var early = _held[place];
+                if (early != null) ctrl.StartCoroutine(HoldFrame(place, early));
+            }
+
+            while (_loading) { yield return null; if (gen != _generation) { HandOn(place, token); yield break; } }
             _loading = true;
             try
             {
@@ -293,16 +318,16 @@ namespace PtcglLeaderboard.Core
             for (int f = 0; f < 3; f++) yield return null;
             _loading = false;
 
-            if (target == null) { _loading = false; HandOn(place); yield break; }   // the screen closed mid-load
+            if (target == null) { _loading = false; HandOn(place, token); yield break; }   // the screen closed mid-load
             if (!Stage(ctrl, place, target, male, blockH, blockColour))
             {
                 Plugin.Log.LogWarning("podium " + place + ": no camera, so no figure.");
-                HandOn(place);
+                HandOn(place, token);
                 yield break;
             }
 
             var mgr = Mgr;
-            if (mgr == null) { HandOn(place); yield break; }
+            if (mgr == null) { HandOn(place, token); yield break; }
 
             // A podium is a victory, so they play the animation the client plays when a player
             // wins a match - ONCE - and then settle into their idle and stay there. Cycling it
@@ -321,10 +346,10 @@ namespace PtcglLeaderboard.Core
             string anim = null;
             try { anim = mgr.GetRandomVictoryAnimation(); }
             catch { }
-            if (string.IsNullOrEmpty(anim)) { HandOn(place); yield break; }
+            if (string.IsNullOrEmpty(anim)) { HandOn(place, token); yield break; }
 
             var anims = Animators(ctrl);
-            if (anims.Length == 0) { HandOn(place); yield break; }
+            if (anims.Length == 0) { HandOn(place, token); yield break; }
 
             // Stand idle until it is this place's turn. Bounded: if a place ahead is never shown
             // at all - a board with fewer than three players - nobody hands the turn on, and
@@ -335,7 +360,7 @@ namespace PtcglLeaderboard.Core
                 queued += Time.deltaTime;
                 yield return null;
             }
-            if (target == null) { HandOn(place); yield break; }
+            if (target == null) { HandOn(place, token); yield break; }
 
             foreach (var a in anims) if (a != null) a.SetTrigger(anim);
 
@@ -348,7 +373,7 @@ namespace PtcglLeaderboard.Core
                 waited += Time.deltaTime;
                 yield return null;
             }
-            if (target == null) { HandOn(place); yield break; }
+            if (target == null) { HandOn(place, token); yield break; }
 
             // The next place goes TurnGap after this pose STARTS - a rolling start, with each
             // celebration overlapping the tail of the one before - not after it finishes.
@@ -356,7 +381,7 @@ namespace PtcglLeaderboard.Core
             float untilIdle = Mathf.Max(0f, length - Blend);
             float first = Mathf.Min(TurnGap, untilIdle);
             if (first > 0f) yield return new WaitForSeconds(first);
-            HandOn(place);
+            HandOn(place, token);
             if (target == null) yield break;
             if (untilIdle > first) yield return new WaitForSeconds(untilIdle - first);
             if (target == null) yield break;
@@ -512,8 +537,15 @@ namespace PtcglLeaderboard.Core
                 // type, the transform stopped being where the feet are and the blocks drifted
                 // apart again by about 12 units.
                 var rends = ctrl.GetComponentsInChildren<Renderer>(true);
-                if (rends.Length == 0) return false;
-                int layer = rends[0].gameObject.layer;
+                // No renderers yet means the empty rig, staged before its figure loads: frame the
+                // block on the layer the rig's camera draws. The figure brings its own layer.
+                int layer;
+                if (rends.Length > 0) layer = rends[0].gameObject.layer;
+                else
+                {
+                    layer = LayerMask.NameToLayer("OpponentAvatar");
+                    if (layer < 0) layer = ctrl.gameObject.layer;
+                }
 
                 // Where the figure stands is read from its ROOT - the transform the animators
                 // drive, which a humanoid rig keeps on the ground plane under the character -
@@ -668,6 +700,23 @@ namespace PtcglLeaderboard.Core
         }
 
         private static bool _shaderLogged;
+
+        /// <summary>Keep one place's camera where Stage put it, for as long as that staging stands.</summary>
+        private static IEnumerator HoldFrame(int place, Borrowed held)
+        {
+            var cam = held.Cam;
+            if (cam == null) yield break;
+            var rot = cam.transform.rotation;
+            while (_held[place] == held && cam != null)
+            {
+                if ((cam.transform.position - held.Framed).sqrMagnitude > 0.0001f) cam.transform.position = held.Framed;
+                if (Quaternion.Angle(cam.transform.rotation, rot) > 0.01f) cam.transform.rotation = rot;
+                if (Mathf.Abs(cam.fieldOfView - held.Fov) > 0.01f) cam.fieldOfView = held.Fov;
+                if (cam.targetTexture != held.Ours) cam.targetTexture = held.Ours;
+                if (!cam.enabled) cam.enabled = true;
+                yield return _endOfFrame;
+            }
+        }
 
         /// <summary>A flat colour, whatever the lighting. Falls through to anything that exists.</summary>
         private static Material UnlitMaterial(Color colour)
